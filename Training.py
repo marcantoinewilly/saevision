@@ -1,15 +1,17 @@
 import torch
 from tqdm import tqdm
-import clip
+import clip  # Requires: pip install git+https://github.com/openai/CLIP.git
 
-def trainSAEonViT(model, optimizer, train_loader, clip_model, clip_preprocess, device, alpha=1e-4, epochs=50):
-
+def trainSAEonViT(model, trainloader, device, alpha=1e-4, epochs=50, lr=1e-3, clip="ViT-B/16"):
+ 
+    clip_model, clip_preprocess = clip.load(clip, device=device)
     clip_model.eval()
 
+    optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
+    
     hooked_cls_output = {}
 
     target_block = clip_model.visual.transformer.resblocks[-2]
-
     def hook(module, input, output):
         hooked_cls_output["cls"] = output[:, 0, :]
 
@@ -19,14 +21,13 @@ def trainSAEonViT(model, optimizer, train_loader, clip_model, clip_preprocess, d
         model.train()
         epoch_loss = 0.0
 
-        for batch_idx, (images, _) in enumerate(tqdm(train_loader, desc=f"Epoch {epoch}")):
+        for batch_idx, (images, _) in enumerate(tqdm(trainloader, desc=f"Epoch {epoch}")):
             images = images.to(device)
 
             with torch.no_grad():
                 images_preprocessed = torch.stack([clip_preprocess(img) for img in images]).to(device)
 
                 hooked_cls_output.clear()
-
                 _ = clip_model.visual(images_preprocessed)
 
                 if "cls" not in hooked_cls_output:
@@ -37,7 +38,7 @@ def trainSAEonViT(model, optimizer, train_loader, clip_model, clip_preprocess, d
             optimizer.zero_grad()
             x, z, xprime = model(cls_tokens)
             loss = model.loss(x, xprime, z, alpha)
-            
+
             loss.backward()
             model.normalizeWdec()
             optimizer.step()
@@ -45,10 +46,10 @@ def trainSAEonViT(model, optimizer, train_loader, clip_model, clip_preprocess, d
             epoch_loss += loss.item()
 
             if batch_idx % 100 == 0:
-                print(f'Epoch {epoch} [{batch_idx * len(images)}/{len(train_loader.dataset)} '
-                      f'({100. * batch_idx / len(train_loader):.0f}%)]\tBatch Loss: {loss.item():.6f}')
+                print(f'Epoch {epoch} [{batch_idx * len(images)}/{len(trainloader.dataset)} '
+                      f'({100. * batch_idx / len(trainloader):.0f}%)]\tBatch Loss: {loss.item():.6f}')
 
-        avg_loss = epoch_loss / len(train_loader)
+        avg_loss = epoch_loss / len(trainloader)
         print(f'>> Epoch {epoch} complete. Avg Loss: {avg_loss:.6f}\n')
 
     handle.remove()
