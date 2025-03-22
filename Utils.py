@@ -1,6 +1,8 @@
 import torch
 import clip
 from tqdm import tqdm
+from torchvision import datasets, transforms
+from torch.utils.data import DataLoader
 
 def getAverageViTActivation(train_loader, device, samples = 16_000, clip="ViT-B/16"):
   
@@ -44,3 +46,25 @@ def getAverageViTActivation(train_loader, device, samples = 16_000, clip="ViT-B/
     mean_activation = all_activations.mean(dim=0)
 
     return mean_activation
+
+def createImageDataset(path, resizew, resizeh):
+    
+    if resizew is None or resizeh is None:
+        transform = transforms.Compose([
+            transforms.ToTensor()
+        ])
+    else:
+        transform = transforms.Compose([
+            transforms.Resize((resizew, resizeh)),
+            transforms.ToTensor()
+        ])
+
+    dataset = datasets.ImageFolder(path, transform = transform)
+
+    return dataset
+
+def createImageDataloader(path, resizew, resizeh, bsize = 64, shuffle = True):
+    
+    dataset = createImageDataset(path, resizew, resizeh)
+    dataloader = DataLoader(dataset, batch_size=bsize, shuffle = shuffle, num_workers = 2)
+    return dataloader
