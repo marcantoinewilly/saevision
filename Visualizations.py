@@ -6,9 +6,9 @@ import scienceplots
 
 plt.style.use(['science', 'no-latex'])
 
-def plot_latent_activations(latent_activations):
-    x = np.arange(len(latent_activations))
-    y = latent_activations
+def plotActivation(activations):
+    x = np.arange(len(activations))
+    y = activations
 
     color_values = np.abs(y)
 
@@ -27,7 +27,7 @@ def plot_latent_activations(latent_activations):
 
     ax.set_xlabel('Latent Dimension', fontsize=12)
     ax.set_ylabel('Activation (z)', fontsize=12)
-    ax.set_title('Latent Activations across Dimensions', fontsize=14, fontweight='bold')
+    ax.set_title('Activations across Dimensions', fontsize=14, fontweight='bold')
 
     plt.tight_layout()
     plt.show()

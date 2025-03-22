@@ -15,8 +15,11 @@ class FlatImageDataset(Dataset):
             if f.lower().endswith((".png", ".jpg", ".jpeg"))
         ]
         self.transform = transform or transforms.Compose([
-            transforms.Resize((resizew, resizeh)),
-            transforms.ToTensor()
+            transforms.Resize((resizew, resizeh), interpolation=Image.BICUBIC),
+            transforms.CenterCrop((resizew, resizeh)),
+            transforms.ToTensor(),
+            transforms.Normalize(mean=(0.48145466, 0.4578275, 0.40821073),
+                                 std=(0.26862954, 0.26130258, 0.27577711))
         ])
 
     def __len__(self):
@@ -38,8 +41,11 @@ def createImageDataloader(path, resizew, resizeh, bsize=64, shuffle=True):
     return dataloader
 
 
-def getAverageViTActivation(train_loader, device, samples=16_000, clip_model_name="ViT-B/16"):
-    clip_model, clip_preprocess = clip.load(clip_model_name, device=device)
+def getAverageViTActivation(dataset, device, samples=16_000, clip_model_name="ViT-B/16", batch_size=1):
+
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False, num_workers=2)
+
+    clip_model, _ = clip.load(clip_model_name, device=device)
     clip_model.eval()
 
     activations = []
@@ -54,22 +60,30 @@ def getAverageViTActivation(train_loader, device, samples=16_000, clip_model_nam
     handle = target_block.register_forward_hook(hook)
 
     with torch.no_grad():
-        for images, _ in tqdm(train_loader, desc="Collecting ViT activations"):
-            images = images.to(device)
-            images_preprocessed = torch.stack([clip_preprocess(img) for img in images]).to(device)
+        pbar = tqdm(total=samples, desc="Collecting ViT Activations")
 
+        for images, _ in loader:
+            images = images.to(device)
             hooked_cls_output.clear()
-            _ = clip_model.visual(images_preprocessed)
+
+            _ = clip_model.visual(images)
 
             if "cls" not in hooked_cls_output:
-                raise RuntimeError("CLS token not captured from -2 layer.")
+                raise RuntimeError("CLS Token not Captured from [-2] Layer.")
 
             cls_tokens = hooked_cls_output["cls"].float()
+
+            remaining = samples - total_collected
+            cls_tokens = cls_tokens[:remaining]
             activations.append(cls_tokens)
+
             total_collected += cls_tokens.size(0)
+            pbar.update(cls_tokens.size(0))
 
             if total_collected >= samples:
                 break
+
+        pbar.close()
 
     handle.remove()
 
