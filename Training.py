@@ -1,6 +1,6 @@
 import torch
 from tqdm import tqdm
-import clip  # Requires: pip install git+https://github.com/openai/CLIP.git
+import clip
 
 def trainSAEonViT(model, trainloader, device, alpha=1e-4, epochs=50, lr=1e-3, clip="ViT-B/16"):
  
