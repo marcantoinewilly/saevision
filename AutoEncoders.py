@@ -1,8 +1,6 @@
-
-# Diverse Autoencoder Implementations in PyTorch
-
 import torch.nn as nn
 import torch
+import math
 
 class AE(nn.Module):
     # https://arxiv.org/pdf/2502.06755 (ReLu Autoencoder)
@@ -37,7 +35,7 @@ class AE(nn.Module):
 class SAE(nn.Module):
     # https://arxiv.org/pdf/2502.06755 (Sparse ReLu Autoencoder)
 
-    def __init__(self, input_dim, hidden_dim):
+    def __init__(self, input_dim, hidden_dim, b_dec_init):
         super(SAE, self).__init__()
         
         # Encoder
@@ -48,6 +46,12 @@ class SAE(nn.Module):
         self.W_dec = nn.Linear(hidden_dim, input_dim, bias=False)
         self.b_dec = nn.Parameter(torch.zeros(input_dim))
         
+        # Initialization
+        nn.init.kaiming_uniform_(self.W_enc.weight, a=math.sqrt(5))
+        nn.init.kaiming_uniform_(self.W_dec.weight, a=math.sqrt(5))
+        self.b_enc.data.zero_()
+        self.b_dec.data.copy_(b_dec_init)
+        
         # Activation
         self.relu = nn.ReLU()
 
@@ -56,6 +60,25 @@ class SAE(nn.Module):
 
         # Sparsity Loss
         self.l1 = nn.L1Loss()
+    
+    def normalizeWdec(model):
+        
+        with torch.no_grad():
+            W = model.W_dec.weight
+            for i in range(W.shape[1]):
+                col = W[:, i]
+                norm = col.norm(p=2)
+                if norm > 0:
+                    W[:, i] = col / norm
+
+        if model.W_dec.weight.grad is not None:
+            G = model.W_dec.weight.grad
+            W = model.W_dec.weight 
+            for i in range(W.shape[1]):
+                col = W[:, i]
+                grad_col = G[:, i]
+                parallel_component = torch.dot(grad_col, col) * col
+                G[:, i] = grad_col - parallel_component
     
     def forward(self, x):
 
