@@ -2,9 +2,9 @@ import torch
 from tqdm import tqdm
 import clip
 
-def trainSAEonViT(model, trainloader, device, alpha=1e-4, epochs=50, lr=1e-3, clip="ViT-B/16"):
+def trainSAEonViT(model, trainloader, device, epochs=50, alpha=1e-4, lr=1e-3, clip_model_name = "ViT-B/16"):
  
-    clip_model, clip_preprocess = clip.load(clip, device=device)
+    clip_model, clip_preprocess = clip.load(clip_model_name, device=device)
     clip_model.eval()
 
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr)
