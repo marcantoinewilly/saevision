@@ -1,146 +1,69 @@
 import torch.nn as nn
 import torch
 import math
+import torch.nn.functional as F
 
-class AE(nn.Module):
-    # https://arxiv.org/pdf/2502.06755 (ReLu Autoencoder)
+class TopKSAE(nn.Module):
 
-    def __init__(self, input_dim, hidden_dim):
-        super(AE, self).__init__()
+    def __init__(self, d, n, k):
+        super(TopKSAE, self).__init__()
         
-        # Encoder
-        self.W_enc = nn.Linear(input_dim, hidden_dim, bias=False)
-        self.b_enc = nn.Parameter(torch.zeros(hidden_dim))
+        self.k = k
+        self.d = d
+        self.n = n
         
-        # Decoder
-        self.W_dec = nn.Linear(hidden_dim, input_dim, bias=False)
-        self.b_dec = nn.Parameter(torch.zeros(input_dim))
+        # Initializing the Encoder as the Transpose of the Decoder helps to prevent dead Latents, according to OpenAI
+        # https://arxiv.org/pdf/2406.04093v1
+        W_dec = torch.randn(d, n) / math.sqrt(d)
+        W_dec = F.normalize(W_dec, dim=0)
+        self.W_dec = nn.Parameter(W_dec)
+        self.W_enc = nn.Parameter(W_dec.T.clone())
         
-        # Activation
-        self.relu = nn.ReLU()
-
-        # Loss
-        self.mse = nn.MSELoss()
+        print("[LOG] Bias initialized with 0-Vector")
+        self.b  = nn.Parameter(torch.zeros(d))
     
-    def forward(self, x):
-
-        z = self.relu(self.W_enc(x - self.b_dec) + self.b_enc)
-        xprime = self.W_dec(z) + self.b_dec
-        return x, z , xprime
-    
-    def loss(self, x, xprime):
-        return self.mse(xprime, x)
-    
-
-class SAE(nn.Module):
-    # https://arxiv.org/pdf/2502.06755 (Sparse ReLu Autoencoder)
-
-    def __init__(self, input_dim, hidden_dim, b_dec_init):
-        super(SAE, self).__init__()
-        
-        # Encoder
-        self.W_enc = nn.Linear(input_dim, hidden_dim, bias=False)
-        self.b_enc = nn.Parameter(torch.zeros(hidden_dim))
-        
-        # Decoder
-        self.W_dec = nn.Linear(hidden_dim, input_dim, bias=False)
-        self.b_dec = nn.Parameter(torch.zeros(input_dim))
-        
-        # Initialization
-        nn.init.kaiming_uniform_(self.W_enc.weight, a=math.sqrt(5))
-        nn.init.kaiming_uniform_(self.W_dec.weight, a=math.sqrt(5))
-        self.b_enc.data.zero_()
-        self.b_dec.data.copy_(b_dec_init)
-        
-        # Activation
-        self.relu = nn.ReLU()
-
-        # Loss
-        self.mse = nn.MSELoss()
-
-        # Sparsity Loss
-        self.l1 = nn.L1Loss()
-    
-    def normalizeWdec(model):
-        
-        with torch.no_grad():
-            W = model.W_dec.weight
-            for i in range(W.shape[1]):
-                col = W[:, i]
-                norm = col.norm(p=2)
-                if norm > 0:
-                    W[:, i] = col / norm
-
-        if model.W_dec.weight.grad is not None:
-            G = model.W_dec.weight.grad
-            W = model.W_dec.weight 
-            for i in range(W.shape[1]):
-                col = W[:, i]
-                grad_col = G[:, i]
-                parallel_component = torch.dot(grad_col, col) * col
-                G[:, i] = grad_col - parallel_component
-    
-    def forward(self, x):
-
-        z = self.relu(self.W_enc(x - self.b_dec) + self.b_enc)
-        xprime = self.W_dec(z) + self.b_dec
-        return x, z , xprime
-    
-    def loss(self, x, xprime, z, alpha):
-        return self.mse(xprime, x) + alpha * self.l1(z, torch.zeros_like(z))
-    
-
-class OSAE(nn.Module):
-    # Orthogonal Sparse ReLU Autoencoder (Work in Progress)
-    
-    def __init__(self, input_dim, hidden_dim, theta, rho, gamma):
-        super(OSAE, self).__init__()
-
-        # Encoder
-        self.W_enc = nn.Linear(input_dim, hidden_dim, bias=False)
-        self.b_enc = nn.Parameter(torch.zeros(hidden_dim))
-
-        # Decoder
-        self.W_dec = nn.Linear(hidden_dim, input_dim, bias=False)
-        self.b_dec = nn.Parameter(torch.zeros(input_dim))
-
-        # Activation
-        self.relu = nn.ReLU()
-
-        # Loss
-        self.mse = nn.MSELoss()
-        
-        # Hyperparameters
-        self.theta = theta 
-        self.rho = rho  
-        self.gamma = gamma 
+    def topk(self, v):
+        vals, idx = torch.topk(v, self.k, dim = -1)
+        mask = torch.zeros_like(v).scatter_(-1, idx, 1.0)
+        return v * mask
 
     def forward(self, x):
+        z = (x - self.b) @ self.W_enc.T         # (B, n)
+        z = self.topk(F.relu(z))                # (B, n)
+        recon = z @ self.W_dec.T + self.b       # (B, d)
+        return recon, z
+    
+    # Must be called after every Optimizer Step
+    @torch.no_grad()
+    def renorm(self): self.W_dec.data[:] = F.normalize(self.W_dec.data, dim=0)
+    
+    # https://transformer-circuits.pub/2023/monosemantic-features
+    # According to Antrophic, a learned Bias is a good Idea!
+    @torch.no_grad()
+    def findBbias(self, loader, n_sample: int = 100_000):
 
-        z = self.relu(self.W_enc(x - self.b_dec) + self.b_enc)
-        x_hat = self.W_dec(z) + self.b_dec 
-        return x, z, x_hat
+        device = self.b.device
+        xs, count = [], 0
+        for batch in loader:
+            x = batch[0] if isinstance(batch, (list,tuple)) else batch
+            x = x.to(device)
+            xs.append(x)
+            count += x.shape[0]
+            if count >= n_sample:
+                break
 
-    def cosine_similarity(self, z):
+        X = torch.cat(xs)[:n_sample]
 
-        norm_z = torch.norm(z, p=2, dim=0, keepdim=True) + 1e-6 
-        z_normalized = z / norm_z 
-        C = torch.matmul(z_normalized.T, z_normalized)  
-        C.fill_diagonal_(0) 
-        return C
+        eps, max_it = 1e-6, 1000
+        y = X[0].clone()
+        for _ in range(max_it):
+            dists = (X - y).norm(dim=1).clamp_min(eps)
+            weights = 1.0 / dists
+            y_next = (weights[:, None] * X).sum(0) / weights.sum()
+            if (y_next - y).norm() < eps:
+                break
+            y = y_next
 
-    def orthogonality_penalty(self, C):
-
-        Wd = self.W_dec.weight
-        C = C.clone()
-        C.masked_fill_(C <= self.theta, 0)
-        penalty = torch.norm((Wd.T @ Wd) * C, p='fro') ** 2 
-        return penalty
-
-    def loss(self, x, x_hat, z):
-
-        mse_loss = self.mse(x_hat, x)
-        sparsity_loss = self.rho * torch.sum(torch.abs(z)) 
-        C = self.cosine_similarity(z)
-        orthogonality_loss = self.gamma * self.orthogonality_penalty(C)
-        return mse_loss + sparsity_loss + orthogonality_loss
+        self.b.data.copy_(y)
+        print(f"[LOG] Bias initialised to Geometric Median of {len(X):,} Tokens")
+        
