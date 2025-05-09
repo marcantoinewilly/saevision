@@ -40,7 +40,7 @@ class TopKSAE(nn.Module):
     # https://transformer-circuits.pub/2023/monosemantic-features
     # According to Antrophic, a learned Bias is a good Idea!
     @torch.no_grad()
-    def findBbias(self, loader, n_sample: int = 100_000):
+    def findBias(self, loader, n_sample: int = 100_000):
 
         device = self.b.device
         xs, count = [], 0
