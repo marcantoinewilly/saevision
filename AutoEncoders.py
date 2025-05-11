@@ -182,5 +182,77 @@ class JumpReLuSAE(nn.Module):
         eps = 1e-6
         phi_init = torch.log(torch.clamp(torch.exp(median) - 1, min=eps))
         self.phi.data.copy_(phi_init.to(self.phi.device))
-
         print("[LOG] Initialized θ to Median")
+        
+
+class ReLuSAE(nn.Module):
+    
+    def __init__(self, d, n, lam=1.0):
+    
+        super().__init__()
+        self.d, self.n = d, n
+        self.lambda_ = lam
+
+        W_dec = torch.randn(d, n) / math.sqrt(d)
+        W_dec = F.normalize(W_dec, dim=0)
+        self.W_dec = nn.Parameter(W_dec)
+        self.W_enc = nn.Parameter(W_dec.T.clone())
+
+        self.b = nn.Parameter(torch.zeros(d))
+
+    def forward(self, x):
+        
+        pre = (x - self.b) @ self.W_enc.T
+        z   = F.relu(pre)
+        recon = z @ self.W_dec.T + self.b
+        return recon, z, pre
+
+    def loss(self, x):
+        
+        recon, z, _ = self.forward(x)
+        rec_loss = F.mse_loss(recon, x, reduction='sum')
+        l1_loss  = z.abs().sum()
+        return rec_loss + self.lambda_ * l1_loss
+
+    @torch.no_grad()
+    def renorm(self): self.W_dec.data[:] = F.normalize(self.W_dec.data, dim=0)
+
+    @torch.no_grad()
+    def findBias(self, vit, dataloader, n, device=None):
+ 
+        vit.eval()
+        device = device or next(self.parameters()).device
+
+        feats = []
+        for i, batch in enumerate(dataloader):
+            if i >= n:
+                break
+            images = batch[0] if isinstance(batch, (tuple, list)) else batch
+            images = images.to(device)
+            f = vit.encode_image(images) 
+            feats.append(f.cpu())
+        if not feats:
+            raise ValueError(f"No batches processed (n={n})")
+
+        features = torch.cat(feats, dim=0) 
+        median = features.mean(dim=0)
+        eps = 1e-5
+        max_iters = 500
+        for _ in range(max_iters):
+            diffs = features - median.unsqueeze(0)
+            dist = diffs.norm(dim=1)
+            zero_mask = dist < eps
+            if zero_mask.any():
+                median = features[zero_mask][0]
+                break
+            inv = 1.0 / (dist + eps)
+            w = inv / inv.sum()
+            new_med = (w.unsqueeze(1) * features).sum(dim=0)
+            if (new_med - median).norm().item() < eps:
+                median = new_med
+                break
+            median = new_med
+
+        median = median.to(device)
+        self.b.data.copy_(median)
+        print("[LOG] Bias initialized to Geometric Median")
