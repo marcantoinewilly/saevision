@@ -122,7 +122,7 @@ class HeavisideFunction(torch.autograd.Function):
         grad_theta = (-grad_output * indicator).sum(dim=0)
         return grad_input, grad_theta, None, 
 
-class JumpReLuSAE(nn.Module):
+class JumpReLUSAE(nn.Module):
     def __init__(self, d, n, lam=1.0, h=0.05):
 
         super().__init__()
@@ -185,7 +185,7 @@ class JumpReLuSAE(nn.Module):
         print("[LOG] Initialized θ to Median")
         
 
-class ReLuSAE(nn.Module):
+class ReLUSAE(nn.Module):
     
     def __init__(self, d, n, lam=1.0):
     
@@ -256,3 +256,73 @@ class ReLuSAE(nn.Module):
         median = median.to(device)
         self.b.data.copy_(median)
         print("[LOG] Bias initialized to Geometric Median")
+        
+class OrthogonalSAE(nn.Module):
+    def __init__(self,
+                 d: int,
+                 k: int,
+                 sparsity: float = 0.04,
+                 orthogonality: float = 0.01,
+                 theta: float = 0.7):
+        
+        super().__init__()
+        self.d = d
+        self.k = k
+        self.sparsity = sparsity
+        self.orthogonality = orthogonality
+        self.theta = theta
+        self.register_buffer('step', torch.tensor(0, dtype=torch.long))
+
+        self.W_dec = nn.Parameter(torch.empty(d, k))
+        self.W_enc = nn.Parameter(torch.empty(k, d))
+        self.bias_e = nn.Parameter(torch.zeros(k))
+        self.bias_d = nn.Parameter(torch.zeros(d))
+
+        nn.init.kaiming_uniform_(self.W_dec, a=math.sqrt(5))
+        self.W_dec.data[:] = F.normalize(self.W_dec.data, dim=0)
+        self.W_enc.data[:] = self.W_dec.data.T.clone()
+
+    def forward(self, x: torch.Tensor):
+ 
+        pre = x @ self.W_enc.T + self.bias_e   
+        f = F.relu(pre)                        
+        recon = f @ self.W_dec.T + self.bias_d
+        return recon, f
+
+    def compute_competition(self, f: torch.Tensor) -> torch.Tensor:
+   
+        mag = f.norm(dim=0, keepdim=True).clamp(min=1e-8)
+        f_norm = f / mag                       
+        C = f_norm.T @ f_norm                
+        C = C - torch.diag(torch.diag(C))      
+        return C
+
+    def ortho_penalty(self, C: torch.Tensor) -> torch.Tensor:
+  
+        M = self.W_dec.T @ self.W_dec          
+        M = M - torch.diag(torch.diag(M))    
+        mask = (C > self.theta).type_as(M)       
+        return torch.sum(mask * (M ** 2))      
+
+    def loss(self, x: torch.Tensor) -> torch.Tensor:
+  
+        self.step += 1
+        recon, f = self.forward(x)
+
+        L_rec = F.mse_loss(recon, x, reduction='sum')
+
+        if self.step <= 1200:
+            return L_rec
+        elif self.step <= 2000:
+            alpha = (self.step - 1200) / 800.0
+            return L_rec + alpha * self.sparsity * f.abs().sum()
+        else:
+            L = L_rec + self.sparsity * f.abs().sum()
+            decay = min(1.0, (self.step - 2000) / 400.0)
+            self.theta = 0.7 - 0.4 * decay
+            C = self.compute_competition(f)
+            L += self.orthogonality * self.ortho_penalty(C)
+            return L
+
+    @torch.no_grad()
+    def renorm(self): self.W_dec.data[:] = F.normalize(self.W_dec.data, dim=0)
