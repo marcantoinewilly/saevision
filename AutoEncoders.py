@@ -124,33 +124,34 @@ class HeavisideFunction(torch.autograd.Function):
 
 class JumpReLUSAE(nn.Module):
     def __init__(self, d, n, lam=1.0, h=0.05):
-
         super().__init__()
         self.d, self.n = d, n
         self.lam = lam
-        self.h = h
+        self.h   = h
 
         W_dec = torch.randn(d, n) / math.sqrt(d)
         W_dec = F.normalize(W_dec, dim=0)
         self.W_dec = nn.Parameter(W_dec)
         self.W_enc = nn.Parameter(W_dec.T.clone())
 
+        self.bias_d = nn.Parameter(torch.zeros(d))  
+        self.bias_e = nn.Parameter(torch.zeros(n))  
+
         self.phi = nn.Parameter(torch.zeros(n))
 
     def forward(self, x):
-
-        theta = F.softplus(self.phi)         
-        pre_act = x @ self.W_enc.T           
+        theta = F.softplus(self.phi)           
+        x_pre  = x - self.bias_d                
+        pre_act = x_pre @ self.W_enc.T + self.bias_e
         z = JumpReLUFunction.apply(pre_act, theta, self.h)
-        recon = z @ self.W_dec.T             
+        recon = z @ self.W_dec.T + self.bias_d  
         return recon, z, pre_act, theta
 
     def loss(self, x):
-  
         recon, _, pre_act, theta = self.forward(x)
         recon_loss = F.mse_loss(recon, x, reduction='sum')
-        mask = HeavisideFunction.apply(pre_act, theta, self.h)
-        l0_loss = mask.sum()
+        mask       = HeavisideFunction.apply(pre_act, theta, self.h)
+        l0_loss    = mask.sum()
         return recon_loss + self.lam * l0_loss
 
     @torch.no_grad()
@@ -159,26 +160,21 @@ class JumpReLUSAE(nn.Module):
 
     @torch.no_grad()
     def findTheta(self, vit, dataloader, n, device=None):
-
         vit.eval()
         device = device or next(self.parameters()).device
-
         all_pre = []
         for i, batch in enumerate(dataloader):
-            if i >= n:
+            if i >= n: 
                 break
             images = batch[0] if isinstance(batch, (tuple, list)) else batch
             images = images.to(device)
-            feats = vit.encode_image(images)  
-            pre_act = feats @ self.W_enc.T     
+            feats = vit.encode_image(images)
+            pre_act = feats @ self.W_enc.T
             all_pre.append(pre_act.cpu())
-
         if not all_pre:
-            raise ValueError("No Batches processed... (n={n})")
-
-        all_pre = torch.cat(all_pre, dim=0)      
-        median = all_pre.median(dim=0).values    
- 
+            raise ValueError(f"No Batches processed... (n={n})")
+        all_pre = torch.cat(all_pre, dim=0)
+        median = all_pre.median(dim=0).values
         eps = 1e-6
         phi_init = torch.log(torch.clamp(torch.exp(median) - 1, min=eps))
         self.phi.data.copy_(phi_init.to(self.phi.device))
