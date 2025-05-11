@@ -25,7 +25,7 @@ class FlatImageDataset(Dataset):
     def __getitem__(self, idx):
         img_path = self.image_paths[idx]
         img = Image.open(img_path).convert("RGB")
-        img = self.transform(img).flatten()
+        img = self.transform(img)
         return img, 0 # Dummy Label
 
 

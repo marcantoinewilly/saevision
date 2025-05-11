@@ -40,30 +40,47 @@ class TopKSAE(nn.Module):
     # https://transformer-circuits.pub/2023/monosemantic-features
     # According to Antrophic, a learned Bias is a good Idea!
     @torch.no_grad()
-    def findBias(self, loader, n_sample: int = 100_000):
-
-        device = self.b.device
-        xs, count = [], 0
-        for batch in loader:
-            x = batch[0] if isinstance(batch, (list,tuple)) else batch
-            x = x.to(device)
-            xs.append(x)
-            count += x.shape[0]
-            if count >= n_sample:
-                break
-
-        X = torch.cat(xs)[:n_sample]
-
-        eps, max_it = 1e-6, 1000
-        y = X[0].clone()
-        for _ in range(max_it):
-            dists = (X - y).norm(dim=1).clamp_min(eps)
-            weights = 1.0 / dists
-            y_next = (weights[:, None] * X).sum(0) / weights.sum()
-            if (y_next - y).norm() < eps:
-                break
-            y = y_next
-
-        self.b.data.copy_(y)
-        print(f"[LOG] Bias initialised to Geometric Median of {len(X):,} Tokens")
+    def findBias(self, vit, dataloader, n):
         
+        vit.eval()
+        device = next(vit.parameters()).device
+
+        feats = []
+        for i, batch in enumerate(dataloader):
+            if i >= n:
+                break
+            images = batch[0] if isinstance(batch, (tuple, list)) else batch
+            images = images.to(device)
+            f = vit.encode_image(images)
+            feats.append(f.cpu())
+        if not feats:
+            raise ValueError(f"No Batches processed... (n={n})")
+
+        features = torch.cat(feats, dim=0) 
+        N, d = features.shape
+
+        median = features.mean(dim=0)
+
+        eps = 1e-5
+        max_iters = 500
+        for _ in range(max_iters):
+            diffs = features - median.unsqueeze(0)  
+            dist = diffs.norm(dim=1)              
+
+            zero_mask = dist < eps
+            if zero_mask.any():
+                median = features[zero_mask][0]
+                break
+
+            inv = 1.0 / (dist + eps)
+            w = inv / inv.sum()                  
+            new_med = (w.unsqueeze(1) * features).sum(dim=0)
+
+            if (new_med - median).norm().item() < eps:
+                median = new_med
+                break
+            median = new_med
+
+        median = median.to(device)
+        self.b.data.copy_(median)
+        print("[LOG] Bias initialized to Geometric Median")
