@@ -258,24 +258,19 @@ class ReLUSAE(nn.Module):
         print("[LOG] Bias initialized to Geometric Median")
         
 class OrthogonalSAE(nn.Module):
-    def __init__(self,
-                 d: int,
-                 k: int,
-                 sparsity: float = 0.04,
-                 orthogonality: float = 0.01,
-                 theta: float = 0.7):
+    def __init__(self, d: int, n: int, sparsity: float = 0.04, orthogonality: float = 0.01, theta: float = 0.7):
         
         super().__init__()
         self.d = d
-        self.k = k
+        self.n = n
         self.sparsity = sparsity
         self.orthogonality = orthogonality
         self.theta = theta
         self.register_buffer('step', torch.tensor(0, dtype=torch.long))
 
-        self.W_dec = nn.Parameter(torch.empty(d, k))
-        self.W_enc = nn.Parameter(torch.empty(k, d))
-        self.bias_e = nn.Parameter(torch.zeros(k))
+        self.W_dec = nn.Parameter(torch.empty(d, n))
+        self.W_enc = nn.Parameter(torch.empty(n, d))
+        self.bias_e = nn.Parameter(torch.zeros(n))
         self.bias_d = nn.Parameter(torch.zeros(d))
 
         nn.init.kaiming_uniform_(self.W_dec, a=math.sqrt(5))
