@@ -183,20 +183,23 @@ class JumpReLUSAE(nn.Module):
 
 class ReLUSAE(nn.Module):
     
-    def __init__(self, d, n, lam=1.0):
+    def __init__(self, input_dim: int, num_features: int, lam: float, alpha: float | None = None):
     
         super().__init__()
-        self.d, self.n = d, n
+        self.input_dim, self.num_features = input_dim, num_features
         self.lambda_ = lam
+        self.alpha = alpha  
 
-        W_dec = torch.randn(d, n) / math.sqrt(d)
+        W_dec = torch.randn(input_dim, num_features) / math.sqrt(input_dim)
         W_dec = F.normalize(W_dec, dim=0)
         self.W_dec = nn.Parameter(W_dec)
         self.W_enc = nn.Parameter(W_dec.T.clone())
 
-        self.b = nn.Parameter(torch.zeros(d))
+        self.b = nn.Parameter(torch.zeros(input_dim))
 
     def forward(self, x):
+        if self.alpha is not None:
+            x = self.alpha * x     
         
         pre = (x - self.b) @ self.W_enc.T
         z   = F.relu(pre)
@@ -207,15 +210,66 @@ class ReLUSAE(nn.Module):
         
         recon, z, _ = self.forward(x)
         rec_loss = F.mse_loss(recon, x, reduction='sum')
-        l1_loss  = z.abs().sum()
+        norms = self.W_dec.norm(dim=0)           
+        l1_loss = (z.abs() * norms).sum()           
         return rec_loss + self.lambda_ * l1_loss
 
     @torch.no_grad()
     def renorm(self): self.W_dec.data[:] = F.normalize(self.W_dec.data, dim=0)
 
     @torch.no_grad()
-    def findBias(self, vit, dataloader, n, device=None):
- 
+    def estimateAlpha(
+        self,
+        dataloader,
+        feature_model,
+        num_batches: int = 50,
+        device=None,
+        layer: int = -1,
+    ) -> float:
+
+        input_dim = self.input_dim
+
+        feature_model.eval()
+        device = device or next(feature_model.parameters()).device
+
+        sq_sum, n_vecs = 0.0, 0
+
+        for i, batch in enumerate(dataloader):
+            if i >= num_batches:
+                break
+
+            images = batch[0] if isinstance(batch, (tuple, list)) else batch
+            images = images.to(device)
+
+            if hasattr(feature_model, "encode_image"):
+                try:
+                    feats = feature_model.encode_image(images, cls_layer=layer)
+                except TypeError:
+                    feats = None
+            else:
+                feats = None
+
+            if feats is None:
+                out = feature_model(pixel_values=images, output_hidden_states=True)
+                feats = out.hidden_states[layer][:, 0]  
+
+            sq_sum += (feats ** 2).sum().item()
+            n_vecs += feats.size(0)
+
+        mean_sq = sq_sum / n_vecs
+        self.alpha = math.sqrt(input_dim / mean_sq)
+        return self.alpha
+
+    @torch.no_grad()
+    def findBias(
+        self,
+        vit,
+        dataloader,
+        n: int,
+        layer: int = -1,
+        device=None,
+    ):
+   
         vit.eval()
         device = device or next(self.parameters()).device
 
@@ -223,14 +277,29 @@ class ReLUSAE(nn.Module):
         for i, batch in enumerate(dataloader):
             if i >= n:
                 break
+
             images = batch[0] if isinstance(batch, (tuple, list)) else batch
             images = images.to(device)
-            f = vit.encode_image(images) 
+
+            if hasattr(vit, "encode_image"):
+                try:
+                    f = vit.encode_image(images, cls_layer=layer)
+                except TypeError:
+                    f = vit.encode_image(images)
+            else:
+                out = vit(pixel_values=images, output_hidden_states=True)
+                f = out.hidden_states[layer][:, 0]
+
+            if self.alpha is not None:
+                f = self.alpha * f
+
             feats.append(f.cpu())
+
         if not feats:
             raise ValueError(f"No batches processed (n={n})")
 
-        features = torch.cat(feats, dim=0) 
+        features = torch.cat(feats, dim=0)       
+
         median = features.mean(dim=0)
         eps = 1e-5
         max_iters = 500
@@ -238,7 +307,7 @@ class ReLUSAE(nn.Module):
             diffs = features - median.unsqueeze(0)
             dist = diffs.norm(dim=1)
             zero_mask = dist < eps
-            if zero_mask.any():
+            if zero_mask.any():                   
                 median = features[zero_mask][0]
                 break
             inv = 1.0 / (dist + eps)
@@ -249,8 +318,7 @@ class ReLUSAE(nn.Module):
                 break
             median = new_med
 
-        median = median.to(device)
-        self.b.data.copy_(median)
+        self.b.data.copy_(median.to(device))
         print("[LOG] Bias initialized to Geometric Median")
         
 class OrthogonalSAE(nn.Module):
