@@ -1,4 +1,5 @@
-
+import torch
+import torch.nn as nn
 from PIL import Image
 import os
 from torch.utils.data import Dataset, DataLoader
@@ -46,3 +47,35 @@ def createImageDataloader(
         shuffle=shuffle,
         pin_memory=True
     )
+
+@torch.no_grad()
+def countDeadNeurons(
+    sae: nn.Module,
+    model: nn.Module,
+    dataloader: torch.utils.data.DataLoader,
+    layer: int = -1,
+    device: torch.device | str | None = None,
+) -> tuple[int, torch.Tensor]:
+
+    sae.eval()
+    model.eval()
+
+    device = device or next(sae.parameters()).device
+    sae.to(device)
+    model.to(device)
+
+    num_features = sae.num_features
+    seen_nonzero = torch.zeros(num_features, dtype=torch.bool, device=device)
+
+    for batch in dataloader:
+        imgs = batch[0] if isinstance(batch, (tuple, list)) else batch
+        imgs = imgs.to(device)
+
+        feats = model(pixel_values=imgs).hidden_states[layer][:, 0]
+        _, z, _ = sae(feats)                    
+
+        seen_nonzero |= (z != 0).any(dim=0)
+
+    dead_mask = ~seen_nonzero
+    dead_count = int(dead_mask.sum().item())
+    return dead_count, dead_mask.cpu()
