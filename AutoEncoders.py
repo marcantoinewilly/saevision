@@ -322,20 +322,26 @@ class ReLUSAE(nn.Module):
         print("[LOG] Bias initialized to Geometric Median")
         
 class OrthogonalSAE(nn.Module):
-    def __init__(self, d: int, n: int, sparsity: float = 0.04, orthogonality: float = 0.01, theta: float = 0.7):
+    def __init__(self, input_dim: int, num_features: int,
+                 sparsity: float = 0.04, orthogonality: float = 0.01,
+                 theta: float = 0.7):
         
         super().__init__()
-        self.d = d
-        self.n = n
+        self.input_dim = input_dim
+        self.num_features = num_features
         self.sparsity = sparsity
         self.orthogonality = orthogonality
         self.theta = theta
         self.register_buffer('step', torch.tensor(0, dtype=torch.long))
+        # buffer for previous activations (temporal consistency)
+        self.register_buffer('prev_f', torch.zeros(1))
+        # weight of temporal consistency loss term
+        self.temp_weight = 1e-3
 
-        self.W_dec = nn.Parameter(torch.empty(d, n))
-        self.W_enc = nn.Parameter(torch.empty(n, d))
-        self.bias_e = nn.Parameter(torch.zeros(n))
-        self.bias_d = nn.Parameter(torch.zeros(d))
+        self.W_dec = nn.Parameter(torch.empty(input_dim, num_features))
+        self.W_enc = nn.Parameter(torch.empty(num_features, input_dim))
+        self.bias_e = nn.Parameter(torch.zeros(num_features))
+        self.bias_d = nn.Parameter(torch.zeros(input_dim))
 
         nn.init.kaiming_uniform_(self.W_dec, a=math.sqrt(5))
         self.W_dec.data[:] = F.normalize(self.W_dec.data, dim=0)
@@ -364,24 +370,44 @@ class OrthogonalSAE(nn.Module):
         return torch.sum(mask * (M ** 2))      
 
     def loss(self, x: torch.Tensor) -> torch.Tensor:
-  
+        
+        warmup_steps       = 30      # pure reconstruction
+        ramp_steps         = 30      # steps to ramp α from 0→1
+        theta_start        = 0.7     # initial θ for competition mask
+        theta_end          = 0.3     # final θ
+        theta_decay_steps  = 40      # steps over which θ is decayed
+
         self.step += 1
         recon, f = self.forward(x)
-
         L_rec = F.mse_loss(recon, x, reduction='sum')
 
-        if self.step <= 1200:
+        # Phase 1 – only reconstruction
+        if self.step <= warmup_steps:
             return L_rec
-        elif self.step <= 2000:
-            alpha = (self.step - 1200) / 800.0
+
+        # Phase 2 – ramp up sparsity
+        ramp_end = warmup_steps + ramp_steps
+        if self.step <= ramp_end:
+            alpha = (self.step - warmup_steps) / ramp_steps
             return L_rec + alpha * self.sparsity * f.abs().sum()
-        else:
-            L = L_rec + self.sparsity * f.abs().sum()
-            decay = min(1.0, (self.step - 2000) / 400.0)
-            self.theta = 0.7 - 0.4 * decay
-            C = self.compute_competition(f)
-            L += self.orthogonality * self.ortho_penalty(C)
-            return L
+
+        # Phase 3 – full loss: reconstruction + sparsity + orthogonality (+ temporal)
+        L = L_rec + self.sparsity * f.abs().sum()
+
+        # θ decay for competition mask
+        decay_progress = min(1.0, (self.step - ramp_end) / theta_decay_steps)
+        self.theta = theta_start - (theta_start - theta_end) * decay_progress
+
+        # orthogonality term
+        C = self.compute_competition(f)
+        L += self.orthogonality * self.ortho_penalty(C)
+
+        # temporal consistency term
+        if self.prev_f.numel() != 1:
+            L += self.temp_weight * F.mse_loss(f, self.prev_f, reduction='sum')
+        self.prev_f = f.detach()
+
+        return L
 
     @torch.no_grad()
     def renorm(self): self.W_dec.data[:] = F.normalize(self.W_dec.data, dim=0)
