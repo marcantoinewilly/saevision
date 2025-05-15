@@ -81,7 +81,7 @@ def countDeadNeurons(
     return dead_count, dead_mask.cpu()
 
 @torch.no_grad()
-def collect_batch_data(
+def collectLayerData(
     sae: torch.nn.Module,
     vit: torch.nn.Module,
     dataloader,
