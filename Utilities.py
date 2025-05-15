@@ -4,6 +4,7 @@ from PIL import Image
 import os
 from torch.utils.data import Dataset, DataLoader
 from transformers import CLIPProcessor
+import matplotlib.pyplot as plt
 
 class ClipImageDataset(Dataset):
 
@@ -114,3 +115,37 @@ def collectLayerData(
         sae_z      = torch.cat(sae_z, dim=0),
         sae_recon  = torch.cat(sae_rec, dim=0),
     )
+
+def findImagesWithHighestActivation(
+    layer_data: dict,
+    neuron_index: int,
+    top_k: int = 5,
+    plot: bool = False,
+) -> list[torch.Tensor]:
+    
+    if "images" not in layer_data or "sae_z" not in layer_data:
+        raise KeyError("layer_data must contain 'images' and 'sae_z' keys.")
+
+    images = layer_data["images"]   # (N, 3, H, W)
+    sae_z  = layer_data["sae_z"]    # (N, F)
+
+    if neuron_index >= sae_z.size(1):
+        raise IndexError(f"neuron_index {neuron_index} out of bounds for F={sae_z.size(1)}")
+
+    scores = sae_z[:, neuron_index]
+    k = min(top_k, scores.size(0))
+    top_idx = torch.topk(scores, k=k, largest=True).indices
+
+    if not plot:
+        return [images[i] for i in top_idx]
+    else:
+        fig, axes = plt.subplots(1, k, figsize=(k * 3, 3))
+        if k == 1:
+            axes = [axes]
+        for ax, idx in zip(axes, top_idx):
+            img = images[idx].permute(1, 2, 0).cpu().numpy()  # CHW → HWC
+            ax.imshow(img)
+            ax.axis("off")
+        fig.suptitle(f"Top {k} images – latent #{neuron_index}")
+        plt.tight_layout()
+        plt.show()
