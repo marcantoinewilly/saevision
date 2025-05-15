@@ -31,7 +31,7 @@ class TopKSAE(nn.Module):
         z = (x - self.b) @ self.W_enc.T         # (B, n)
         z = self.topk(F.relu(z))                # (B, n)
         recon = z @ self.W_dec.T + self.b       # (B, d)
-        return recon, z
+        return x, z, recon
     
     # Must be called after every Optimizer Step
     @torch.no_grad()
@@ -145,7 +145,7 @@ class JumpReLUSAE(nn.Module):
         pre_act = x_pre @ self.W_enc.T + self.bias_e
         z = JumpReLUFunction.apply(pre_act, theta, self.h)
         recon = z @ self.W_dec.T + self.bias_d  
-        return recon, z, pre_act, theta
+        return x, z, recon, pre_act, theta
 
     def loss(self, x):
         recon, _, pre_act, theta = self.forward(x)
@@ -204,7 +204,7 @@ class ReLUSAE(nn.Module):
         pre = (x - self.b) @ self.W_enc.T
         z   = F.relu(pre)
         recon = z @ self.W_dec.T + self.b
-        return recon, z, pre
+        return x, z, recon, pre
 
     def loss(self, x):
         
@@ -352,7 +352,7 @@ class OrthogonalSAE(nn.Module):
         pre = x @ self.W_enc.T + self.bias_e   
         f = F.relu(pre)                        
         recon = f @ self.W_dec.T + self.bias_d
-        return recon, f
+        return x, f, recon
 
     def compute_competition(self, f: torch.Tensor) -> torch.Tensor:
    

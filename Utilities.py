@@ -72,10 +72,45 @@ def countDeadNeurons(
         imgs = imgs.to(device)
 
         feats = model(pixel_values=imgs).hidden_states[layer][:, 0]
-        _, z, _ = sae(feats)                    
+        z = sae(feats)[1]
 
         seen_nonzero |= (z != 0).any(dim=0)
 
     dead_mask = ~seen_nonzero
     dead_count = int(dead_mask.sum().item())
     return dead_count, dead_mask.cpu()
+
+@torch.no_grad()
+def collect_batch_data(
+    sae: torch.nn.Module,
+    vit: torch.nn.Module,
+    dataloader,
+    layer: int = -1,
+    device=None,
+):
+
+    sae.eval()
+    vit.eval()
+    device = device or next(sae.parameters()).device
+
+    imgs, vit_act, sae_z, sae_rec = [], [], [], []
+
+    for batch in dataloader:
+        x = (batch[0] if isinstance(batch, (tuple, list)) else batch).to(device)
+
+        imgs.append(x.cpu())
+
+        act = vit(pixel_values=x, output_hidden_states=True)\
+                .hidden_states[layer][:, 0]
+        vit_act.append(act.cpu())
+
+        _, z, recon = sae(act)[:3]
+        sae_z.append(z.cpu())
+        sae_rec.append(recon.cpu())
+
+    return dict(
+        images     = torch.cat(imgs, dim=0),
+        vit_act    = torch.cat(vit_act, dim=0),
+        sae_z      = torch.cat(sae_z, dim=0),
+        sae_recon  = torch.cat(sae_rec, dim=0),
+    )
