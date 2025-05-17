@@ -267,7 +267,6 @@ def plotActiveFeatureHistogram(
     plt.tight_layout()
     plt.show()
 
-
 # Correlation of one latent with every other latent (optionally plotted)
 @torch.no_grad()
 def plotNeuronCorrelation(
@@ -378,3 +377,44 @@ def plotAverageFeatureImage(
         return None
     else:
         return mean_img
+
+def countParameters(model: nn.Module, only_trainable: bool = True) -> int:
+
+    if only_trainable:
+        return sum(p.numel() for p in model.parameters() if p.requires_grad)
+    else:
+        return sum(p.numel() for p in model.parameters())
+
+def saveSAE(
+    sae: nn.Module,
+    path: str,
+    optimizer: torch.optim.Optimizer | None = None,
+    extra: dict | None = None, 
+    ):
+
+    ckpt = {
+        "sae_state": sae.state_dict(),
+    }
+    if optimizer is not None:
+        ckpt["optim_state"] = optimizer.state_dict()
+    if extra is not None:
+        ckpt["extra"] = extra
+
+    torch.save(ckpt, path)
+    print(f"[LOG] SAE Checkpoint written to {path}")
+
+def loadSAE(
+    sae: nn.Module,
+    path: str,
+    optimizer: torch.optim.Optimizer | None = None,
+    map_location: str | torch.device | None = "cpu",
+    ):
+
+    ckpt = torch.load(path, map_location=map_location)
+    sae.load_state_dict(ckpt["sae_state"])
+
+    if optimizer is not None and "optim_state" in ckpt:
+        optimizer.load_state_dict(ckpt["optim_state"])
+
+    print(f"[LOG] SAE Weights restored from {path}")
+    return ckpt.get("extra", None)
