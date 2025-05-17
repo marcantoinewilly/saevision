@@ -131,6 +131,7 @@ def findImagesWithHighestActivation(
     neuron_index: int,
     top_k: int = 5,
     plot: bool = False,
+    denorm: bool = False,
 ) -> list[torch.Tensor]:
     
     if "images" not in layer_data or "sae_z" not in layer_data:
@@ -153,8 +154,15 @@ def findImagesWithHighestActivation(
         if k == 1:
             axes = [axes]
         for ax, idx in zip(axes, top_idx):
-            img = images[idx].permute(1, 2, 0).cpu().numpy()  # CHW → HWC
-            ax.imshow(img)
+            img = images[idx]
+            if denorm:
+                mean = torch.tensor([0.481, 0.457, 0.408]).view(3,1,1)
+                std  = torch.tensor([0.269, 0.261, 0.276]).view(3,1,1)
+                img_denorm = (img * std + mean).clamp(0,1)
+                img_np = img_denorm.permute(1,2,0).cpu().numpy()
+            else:
+                img_np = img.permute(1, 2, 0).cpu().numpy()
+            ax.imshow(img_np)
             ax.axis("off")
         fig.suptitle(f"Top {k} images – latent #{neuron_index}")
         plt.tight_layout()
@@ -333,6 +341,7 @@ def plotAverageFeatureImage(
     neuron_index: int,
     top_k: int = 50,
     plot: bool = True,
+    denorm: bool = False,
     ):
     
     if "images" not in layer_data or "sae_z" not in layer_data:
@@ -353,7 +362,13 @@ def plotAverageFeatureImage(
     mean_img = images[top_idx].float().mean(dim=0)   # (3,H,W)
 
     if plot:
-        img_np = mean_img.permute(1, 2, 0).cpu().numpy()
+        if denorm:
+            mean = torch.tensor([0.481, 0.457, 0.408]).view(3,1,1)
+            std  = torch.tensor([0.269, 0.261, 0.276]).view(3,1,1)
+            img_denorm = (mean_img * std + mean).clamp(0,1)
+            img_np = img_denorm.permute(1, 2, 0).cpu().numpy()
+        else:
+            img_np = mean_img.permute(1, 2, 0).cpu().numpy()
         plt.figure(figsize=(3, 3))
         plt.imshow(img_np)
         plt.axis("off")
