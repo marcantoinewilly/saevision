@@ -384,45 +384,14 @@ def countParameters(model: nn.Module, only_trainable: bool = True) -> int:
     else:
         return sum(p.numel() for p in model.parameters())
 
-def saveSAE(
-    sae: nn.Module,
-    path: str,
-    optimizer: torch.optim.Optimizer | None = None,
-    extra: dict | None = None, 
-    ):
+def saveSAE(sae: nn.Module, path: str):
+    torch.save(sae.state_dict(), path)
+    print(f"[LOG] state_dict saved → {path}")
 
-    filtered_state = {
-        k: v for k, v in sae.state_dict().items() if k != "prev_f"
-    }
-    ckpt = {"sae_state": filtered_state}
-    if optimizer is not None:
-        ckpt["optim_state"] = optimizer.state_dict()
-    if extra is not None:
-        ckpt["extra"] = extra
-
-    torch.save(ckpt, path)
-    print(f"[LOG] SAE Checkpoint written to {path}")
-
-def loadSAE(
-    sae: nn.Module,
-    path: str,
-    optimizer: torch.optim.Optimizer | None = None,
-    map_location: str | torch.device | None = "cpu",
-    ):
-
-    ckpt = torch.load(path, map_location=map_location)
-    missing, unexpected = sae.load_state_dict(
-        ckpt["sae_state"], strict=False
-    )
-    if missing or unexpected:
-        print(f"[LOG] Ignored keys – missing: {missing}, unexpected: {unexpected}")
-
-    if optimizer is not None and "optim_state" in ckpt:
-        optimizer.load_state_dict(ckpt["optim_state"])
-
-    print(f"[LOG] SAE Weights restored from {path}")
-    return ckpt.get("extra", None)
-
+def loadSAE(sae: nn.Module, path: str, map_location: str | torch.device = "cpu"):
+    state = torch.load(path, map_location=map_location)
+    sae.load_state_dict(state)
+    print(f"[LOG] state_dict loaded ← {path}")
 
 # Return Indices of active Latents in a Vector or Batch
 @torch.no_grad()
