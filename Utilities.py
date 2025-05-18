@@ -10,7 +10,7 @@ import matplotlib.collections as mcoll
 import matplotlib.colors as mcolors
 import scienceplots
 
-# Lightweight dataset that applies CLIP preprocessing to every image file
+# Lightweight Dataset that applies CLIP Preprocessing to every Image File
 class ClipImageDataset(Dataset):
 
     def __init__(self, folder_path: str, processor: CLIPProcessor):
@@ -29,8 +29,7 @@ class ClipImageDataset(Dataset):
         pixel_values = self.processor(images=img, return_tensors="pt").pixel_values
         return pixel_values.squeeze(0)
 
-
-# Convenience wrapper that returns a ClipImageDataset
+# Convenience Wrapper that returns a ClipImageDataset
 def createImageDataset(
     path: str,
     model_name: str = "openai/clip-vit-base-patch32"
@@ -39,8 +38,7 @@ def createImageDataset(
     processor = CLIPProcessor.from_pretrained(model_name)
     return ClipImageDataset(path, processor)
 
-
-# Builds a DataLoader for the preprocessed image dataset
+# Builds a DataLoader for the preprocessed Image Dataset
 def createImageDataloader(
     path: str,
     model_name: str = "openai/clip-vit-base-patch32",
@@ -56,7 +54,7 @@ def createImageDataloader(
         pin_memory=True
     )
 
-# Counts SAE latent units that are never non‑zero on the loader
+# Counts SAE Latent Units that are never non‑zero on the Loader
 @torch.no_grad()
 def countDeadNeurons(
     sae: nn.Module,
@@ -89,7 +87,7 @@ def countDeadNeurons(
     dead_count = int(dead_mask.sum().item())
     return dead_count, dead_mask.cpu()
 
-# Caches images, ViT activations, SAE latents & reconstructions
+# Caches Images, ViT Activations, SAE Latents & Reconstructions
 @torch.no_grad()
 def collectLayerData(
     sae: torch.nn.Module,
@@ -125,7 +123,7 @@ def collectLayerData(
         sae_recon  = torch.cat(sae_rec, dim=0),
     )
 
-# Returns / plots the top‑k images that maximally activate a latent
+# Returns / Plots the TopK Images that maximally activate a Latent
 def findImagesWithHighestActivation(
     layer_data: dict,
     neuron_index: int,
@@ -168,7 +166,7 @@ def findImagesWithHighestActivation(
         plt.tight_layout()
         plt.show()   
         
-# Colour‑line plot of a 1‑D activation vector
+# Colour‑line Plot of a 1‑D Activation Vector
 def plotActivation(activations):
     
     if isinstance(activations, torch.Tensor):
@@ -208,7 +206,7 @@ def plotActivation(activations):
     plt.tight_layout()
     plt.show()
 
-# Histogram of activation values for one latent neuron
+# Histogram of Activation Values for one Latent Neuron
 def plotLatentHistogram(
     layer_data: dict,
     neuron_index: int,
@@ -240,8 +238,7 @@ def plotLatentHistogram(
     plt.tight_layout()
     plt.show()
 
-
-# Histogram of number of active latents per image
+# Histogram of Number of Active Latents per Image
 def plotActiveFeatureHistogram(
     layer_data: dict,
     bins: int = 40,
@@ -267,7 +264,7 @@ def plotActiveFeatureHistogram(
     plt.tight_layout()
     plt.show()
 
-# Correlation of one latent with every other latent (optionally plotted)
+# Correlation of one Latent with every other Latent
 @torch.no_grad()
 def plotNeuronCorrelation(
     layer_data: dict,
@@ -298,7 +295,7 @@ def plotNeuronCorrelation(
 
     plotActivation(corr_np)
 
-# Lists the most strongly correlated latent pairs for a reference neuron
+# Lists the most strongly correlated Latent Pairs for a Reference Neuron
 @torch.no_grad()
 def getCorrelatedNeurons(
     layer_data: dict,
@@ -333,7 +330,7 @@ def getCorrelatedNeurons(
 
     return list(zip(idx, vals))
 
-# Shows the pixel‑wise mean of the top‑k activating images for a latent
+# Shows the pixel‑wise Mean of the TopK activating Images for a Latent
 @torch.no_grad()
 def plotAverageFeatureImage(
     layer_data: dict,
