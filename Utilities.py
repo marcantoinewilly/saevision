@@ -137,6 +137,7 @@ def findImagesWithHighestActivation(
     top_k: int = 5,
     plot: bool = False,
     denorm: bool = False,
+    figsize: tuple | None = None,
 ) -> list[torch.Tensor]:
     
     if "images" not in layer_data or "sae_z" not in layer_data:
@@ -155,7 +156,7 @@ def findImagesWithHighestActivation(
     if not plot:
         return [images[i] for i in top_idx]
     else:
-        fig, axes = plt.subplots(1, k)
+        fig, axes = plt.subplots(1, k, figsize=figsize) if figsize else plt.subplots(1, k)
         if k == 1:
             axes = [axes]
         for ax, idx in zip(axes, top_idx):
@@ -174,7 +175,7 @@ def findImagesWithHighestActivation(
         plt.show()   
         
 # Colour‑line Plot of a 1-D Activation Vector
-def plotActivation(activations):
+def plotActivation(activations, figsize: tuple | None = None):
     
     if isinstance(activations, torch.Tensor):
         activations = activations.detach().cpu()
@@ -201,7 +202,7 @@ def plotActivation(activations):
     lc.set_array(color_values)
     lc.set_linewidth(2)
 
-    fig, ax = plt.subplots()
+    fig, ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
     ax.add_collection(lc)
     ax.set_xlim(x.min(), x.max())
     ax.set_ylim(y.min() - 0.1, y.max() + 0.1)
@@ -220,6 +221,7 @@ def plotLatentHistogram(
     bins: int | None = None,
     log_y: bool = True,
     int_bins: bool = False,
+    figsize: tuple | None = None,
     ):
     """
     Plots a histogram of activation values for one latent neuron.
@@ -256,7 +258,7 @@ def plotLatentHistogram(
         if float(v_min).is_integer() and float(v_max).is_integer():
             bins = np.arange(v_min - 0.5, v_max + 1.5)
 
-    plt.figure()
+    plt.figure(figsize=figsize) if figsize else plt.figure()
     plt.hist(values, bins=bins, color="steelblue", rwidth=1.0)
     if log_y:
         plt.yscale("log")
@@ -273,6 +275,7 @@ def plotActiveFeatureHistogram(
     bins: int | None = None,
     log_y: bool = False,
     int_bins: bool = True,
+    figsize: tuple | None = None,
     ):
     
     if "sae_z" not in layer_data:
@@ -294,7 +297,7 @@ def plotActiveFeatureHistogram(
         min_n, max_n = active_per_img.min(), active_per_img.max()
         bins = np.arange(min_n - 0.5, max_n + 1.5)
 
-    plt.figure()
+    plt.figure(figsize=figsize) if figsize else plt.figure()
     plt.hist(active_per_img, bins=bins, color="seagreen", rwidth=1.0)
     if log_y:
         plt.yscale("log")
@@ -379,6 +382,7 @@ def plotAverageFeatureImage(
     top_k: int = 50,
     plot: bool = True,
     denorm: bool = False,
+    figsize: tuple | None = None,
     ):
     
     if "images" not in layer_data or "sae_z" not in layer_data:
@@ -399,6 +403,7 @@ def plotAverageFeatureImage(
     mean_img = images[top_idx].float().mean(dim=0)   # (3,H,W)
 
     if plot:
+        plt.figure(figsize=figsize) if figsize else plt.figure()
         if denorm:
             mean = torch.tensor([0.481, 0.457, 0.408]).view(3,1,1)
             std  = torch.tensor([0.269, 0.261, 0.276]).view(3,1,1)
@@ -406,7 +411,6 @@ def plotAverageFeatureImage(
             img_np = img_denorm.permute(1, 2, 0).cpu().numpy()
         else:
             img_np = mean_img.permute(1, 2, 0).cpu().numpy()
-        plt.figure()
         plt.imshow(img_np)
         plt.axis("off")
         plt.title(f"Average of Top{k} Images for Latent #{neuron_index}")
