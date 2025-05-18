@@ -418,3 +418,27 @@ def loadSAE(
     print(f"[LOG] SAE Weights restored from {path}")
     return ckpt.get("extra", None)
 
+
+# Return Indices of active Latents in a Vector or Batch
+@torch.no_grad()
+def getActiveLatents(
+    z: torch.Tensor,
+    threshold: float = 0.0,
+    return_values: bool = False,
+):
+    
+    if z.ndim == 1:
+        mask = z.abs() > threshold
+        idx  = torch.nonzero(mask, as_tuple=False).flatten().tolist()
+        if return_values:
+            vals = z[mask].tolist()
+            return list(zip(idx, vals))
+        return idx
+    elif z.ndim == 2:
+        out = []
+        for row in z:
+            mask = row.abs() > threshold
+            out.append(torch.nonzero(mask, as_tuple=False).flatten().tolist())
+        return out
+    else:
+        raise ValueError("z must be 1‑D or 2‑D tensor")
