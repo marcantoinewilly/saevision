@@ -324,7 +324,10 @@ class ReLUSAE(nn.Module):
 class OrthogonalSAE(nn.Module):
     def __init__(self, input_dim: int, num_features: int,
                  sparsity: float = 0.04, orthogonality: float = 0.01,
-                 theta: float = 0.7):
+                 theta: float = 0.7,
+                 warmup_steps: int = 500,
+                 ramp_steps: int = 1000,
+                 theta_decay_steps: int = 1500):
         
         super().__init__()
         self.input_dim = input_dim
@@ -346,6 +349,10 @@ class OrthogonalSAE(nn.Module):
         nn.init.kaiming_uniform_(self.W_dec, a=math.sqrt(5))
         self.W_dec.data[:] = F.normalize(self.W_dec.data, dim=0)
         self.W_enc.data[:] = self.W_dec.data.T.clone()
+
+        self.warmup_steps      = warmup_steps
+        self.ramp_steps        = ramp_steps
+        self.theta_decay_steps = theta_decay_steps
 
     def forward(self, x: torch.Tensor):
  
@@ -371,11 +378,11 @@ class OrthogonalSAE(nn.Module):
 
     def loss(self, x: torch.Tensor) -> torch.Tensor:
         
-        warmup_steps       = 30      # pure reconstruction
-        ramp_steps         = 30      # steps to ramp α from 0→1
-        theta_start        = 0.7     # initial θ for competition mask
-        theta_end          = 0.3     # final θ
-        theta_decay_steps  = 40      # steps over which θ is decayed
+        warmup_steps      = self.warmup_steps
+        ramp_steps        = self.ramp_steps
+        theta_start       = 0.7
+        theta_end         = 0.3
+        theta_decay_steps = self.theta_decay_steps
 
         self.step += 1
         _, f, recon = self.forward(x)[:3]
