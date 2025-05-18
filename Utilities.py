@@ -10,6 +10,11 @@ import matplotlib.collections as mcoll
 import matplotlib.colors as mcolors
 import scienceplots
 
+plt.rcParams.update({
+    "figure.figsize": (10, 6),   # bigger plots for interactive inspection
+    "figure.dpi":     110,       # crisper text in Jupyter/Colab
+})
+
 # Lightweight Dataset that applies CLIP Preprocessing to every Image File
 class ClipImageDataset(Dataset):
 
