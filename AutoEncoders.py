@@ -378,7 +378,7 @@ class OrthogonalSAE(nn.Module):
         theta_decay_steps  = 40      # steps over which θ is decayed
 
         self.step += 1
-        recon, f = self.forward(x)
+        _, f, recon = self.forward(x)[:3]
         L_rec = F.mse_loss(recon, x, reduction='sum')
 
         # Phase 1 – only reconstruction
