@@ -171,7 +171,8 @@ def findImagesWithHighestActivation(
             ax.imshow(img_np)
             ax.axis("off")
         fig.suptitle(f"Top {k} Images for Latent #{neuron_index}")
-        plt.tight_layout()
+        # avoid large gap between suptitle and images
+        plt.tight_layout(rect=[0, 0, 1, 0.92])
         plt.show()   
         
 # Colour‑line Plot of a 1-D Activation Vector
