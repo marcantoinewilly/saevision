@@ -264,7 +264,7 @@ class ReLUSAE(nn.Module):
         self,
         vit,
         dataloader,
-        n: int,
+        n: int, # Count of Batches
         layer: int = -1,
         device=None,
     ):
