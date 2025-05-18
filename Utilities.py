@@ -43,7 +43,8 @@ def createImageDataloader(
     path: str,
     model_name: str = "openai/clip-vit-base-patch32",
     batch_size: int = 64,
-    shuffle: bool = True
+    shuffle: bool = True,
+    drop_last: bool = True,
 ) -> DataLoader:
 
     dataset = createImageDataset(path, model_name)
@@ -51,6 +52,7 @@ def createImageDataloader(
         dataset,
         batch_size=batch_size,
         shuffle=shuffle,
+        drop_last=drop_last,
         pin_memory=True
     )
 
