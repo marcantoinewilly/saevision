@@ -150,7 +150,7 @@ def findImagesWithHighestActivation(
     if not plot:
         return [images[i] for i in top_idx]
     else:
-        fig, axes = plt.subplots(1, k, figsize=(k * 3, 3))
+        fig, axes = plt.subplots(1, k)
         if k == 1:
             axes = [axes]
         for ax, idx in zip(axes, top_idx):
@@ -196,7 +196,7 @@ def plotActivation(activations):
     lc.set_array(color_values)
     lc.set_linewidth(2)
 
-    fig, ax = plt.subplots(figsize=(12, 4))
+    fig, ax = plt.subplots()
     ax.add_collection(lc)
     ax.set_xlim(x.min(), x.max())
     ax.set_ylim(y.min() - 0.1, y.max() + 0.1)
@@ -251,7 +251,7 @@ def plotLatentHistogram(
         if float(v_min).is_integer() and float(v_max).is_integer():
             bins = np.arange(v_min - 0.5, v_max + 1.5)
 
-    plt.figure(figsize=(4, 3))
+    plt.figure()
     plt.hist(values, bins=bins, color="steelblue", rwidth=1.0)
     if log_y:
         plt.yscale("log")
@@ -289,7 +289,7 @@ def plotActiveFeatureHistogram(
         min_n, max_n = active_per_img.min(), active_per_img.max()
         bins = np.arange(min_n - 0.5, max_n + 1.5)
 
-    plt.figure(figsize=(4, 3))
+    plt.figure()
     plt.hist(active_per_img, bins=bins, color="seagreen", rwidth=1.0)
     if log_y:
         plt.yscale("log")
@@ -401,10 +401,10 @@ def plotAverageFeatureImage(
             img_np = img_denorm.permute(1, 2, 0).cpu().numpy()
         else:
             img_np = mean_img.permute(1, 2, 0).cpu().numpy()
-        plt.figure(figsize=(3, 3))
+        plt.figure()
         plt.imshow(img_np)
         plt.axis("off")
-        plt.title(f"Average of Top‑{k} Images – Latent #{neuron_index}")
+        plt.title(f"Average of Top{k} Images for Latent #{neuron_index}")
         plt.tight_layout()
         plt.show()
         return None
