@@ -199,19 +199,18 @@ class ReLUSAE(nn.Module):
 
     def forward(self, x):
         if self.alpha is not None:
-            x = self.alpha * x     
-        
-        pre = (x - self.b) @ self.W_enc.T
-        z   = F.relu(pre)
+            x = self.alpha * x
+
+        pre   = (x - self.b) @ self.W_enc.T
+        z     = F.relu(pre)
         recon = z @ self.W_dec.T + self.b
-        return x, z, recon, pre
+        return x, z, recon
 
     def loss(self, x):
-        
-        recon, z, _ = self.forward(x)
-        rec_loss = F.mse_loss(recon, x, reduction='sum')
-        norms = self.W_dec.norm(dim=0)           
-        l1_loss = (z.abs() * norms).sum()           
+        x_in, z, recon = self.forward(x)
+        rec_loss = F.mse_loss(recon, x_in, reduction='sum')
+        norms    = self.W_dec.norm(dim=0)
+        l1_loss  = (z.abs() * norms).sum()
         return rec_loss + self.lambda_ * l1_loss
 
     @torch.no_grad()
