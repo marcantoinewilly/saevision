@@ -137,45 +137,46 @@ def findImagesWithHighestActivation(
     top_k: int = 5,
     plot: bool = False,
     denorm: bool = False,
+    columns: int | None = None,
     figsize: tuple | None = None,
 ) -> list[torch.Tensor]:
-    
-    if "images" not in layer_data or "sae_z" not in layer_data:
-        raise KeyError("layer_data must contain 'images' and 'sae_z' keys.")
 
-    images = layer_data["images"]   # (N, 3, H, W)
-    sae_z  = layer_data["sae_z"]    # (N, F)
+    images = layer_data["images"]      # (N, C, H, W)
+    z      = layer_data["sae_z"]       # (N, F)
 
-    if neuron_index >= sae_z.size(1):
-        raise IndexError(f"neuron_index {neuron_index} out of bounds for F={sae_z.size(1)}")
-
-    scores = sae_z[:, neuron_index]
-    k = min(top_k, scores.size(0))
-    top_idx = torch.topk(scores, k=k, largest=True).indices
+    top_idx  = z[:, neuron_index].argsort(descending=True)[:top_k].tolist()
+    top_imgs = [images[i] for i in top_idx]
 
     if not plot:
-        return [images[i] for i in top_idx]
-    else:
-        fig, axes = plt.subplots(1, k, figsize=figsize) if figsize else plt.subplots(1, k)
-        if k == 1:
-            axes = [axes]
-        for ax, idx in zip(axes, top_idx):
-            img = images[idx]
-            if denorm:
-                mean = torch.tensor([0.481, 0.457, 0.408]).view(3,1,1)
-                std  = torch.tensor([0.269, 0.261, 0.276]).view(3,1,1)
-                img_denorm = (img * std + mean).clamp(0,1)
-                img_np = img_denorm.permute(1,2,0).cpu().numpy()
-            else:
-                img_np = img.permute(1, 2, 0).cpu().numpy()
-            ax.imshow(img_np)
-            ax.axis("off")
-        fig.suptitle(f"Top {k} Images for Latent #{neuron_index}")
-        # avoid large gap between suptitle and images
-        plt.tight_layout(rect=[0, 0, 1, 0.92])
-        plt.show()   
+        return top_imgs
+
+    k = len(top_imgs)
+    if columns is None or columns <= 0:
+        columns = k
+    rows = int(np.ceil(k / columns))
+
+    fig, axes = plt.subplots(rows, columns, figsize=figsize) if figsize else plt.subplots(rows, columns)
+    axes = np.array(axes).flatten()
+
+    means = np.array([0.48145466, 0.4578275, 0.40821073])
+    stds  = np.array([0.26862954, 0.26130258, 0.27577711])
+
+    for ax, img in zip(axes, top_imgs):
+        arr = img.cpu().numpy()
+        if denorm:
+            arr = arr * stds[:, None, None] + means[:, None, None]
+        arr = np.clip(arr.transpose(1, 2, 0), 0, 1)
+        ax.imshow(arr)
+        ax.axis("off")
+
+    # ungenutzte Felder ausblenden
+    for ax in axes[k:]:
+        ax.axis("off")
+
+    plt.tight_layout()
+    plt.show()
+    return top_imgs
         
-# Colour‑line Plot of a 1-D Activation Vector
 def plotActivation(activations, figsize: tuple | None = None):
     
     if isinstance(activations, torch.Tensor):
