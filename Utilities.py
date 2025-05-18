@@ -391,9 +391,10 @@ def saveSAE(
     extra: dict | None = None, 
     ):
 
-    ckpt = {
-        "sae_state": sae.state_dict(),
+    filtered_state = {
+        k: v for k, v in sae.state_dict().items() if k != "prev_f"
     }
+    ckpt = {"sae_state": filtered_state}
     if optimizer is not None:
         ckpt["optim_state"] = optimizer.state_dict()
     if extra is not None:
@@ -410,7 +411,11 @@ def loadSAE(
     ):
 
     ckpt = torch.load(path, map_location=map_location)
-    sae.load_state_dict(ckpt["sae_state"])
+    missing, unexpected = sae.load_state_dict(
+        ckpt["sae_state"], strict=False
+    )
+    if missing or unexpected:
+        print(f"[LOG] Ignored keys – missing: {missing}, unexpected: {unexpected}")
 
     if optimizer is not None and "optim_state" in ckpt:
         optimizer.load_state_dict(ckpt["optim_state"])
