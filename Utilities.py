@@ -400,7 +400,9 @@ def getActiveLatents(
     threshold: float = 0.0,
     return_values: bool = False,
 ):
-    
+    if isinstance(z, np.ndarray):
+        z = torch.from_numpy(z)
+
     if z.ndim == 1:
         mask = z.abs() > threshold
         idx  = torch.nonzero(mask, as_tuple=False).flatten().tolist()
