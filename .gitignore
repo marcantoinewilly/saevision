@@ -29,7 +29,6 @@ pip-wheel-metadata/
 *.bak
 *.swp
 *.swo
-*.pt
 *.pth
 *.ckpt
 outputs/
