@@ -164,11 +164,11 @@ def findImagesWithHighestActivation(
                 img_np = img.permute(1, 2, 0).cpu().numpy()
             ax.imshow(img_np)
             ax.axis("off")
-        fig.suptitle(f"Top {k} images – latent #{neuron_index}")
+        fig.suptitle(f"Top {k} Images for Latent #{neuron_index}")
         plt.tight_layout()
         plt.show()   
         
-# Colour‑line Plot of a 1‑D Activation Vector
+# Colour‑line Plot of a 1-D Activation Vector
 def plotActivation(activations):
     
     if isinstance(activations, torch.Tensor):
@@ -212,10 +212,16 @@ def plotActivation(activations):
 def plotLatentHistogram(
     layer_data: dict,
     neuron_index: int,
-    bins: int = 60,
+    bins: int | None = None,
     log_y: bool = True,
+    int_bins: bool = False,
     ):
-    
+    """
+    Plots a histogram of activation values for one latent neuron.
+    If bins is None, chooses bins automatically:
+      - If int_bins is True and min/max values are integers, uses integer-aligned bins.
+      - Otherwise falls back to 'auto'.
+    """
     if "sae_z" not in layer_data:
         raise KeyError("layer_data requires the key 'sae_z'.")
 
@@ -229,23 +235,41 @@ def plotLatentHistogram(
     if isinstance(values, torch.Tensor):
         values = values.detach().cpu().numpy()
 
+    # Choose bins automatically when bins is None
+    if bins is None:
+        if int_bins:
+            v_min, v_max = values.min(), values.max()
+            if float(v_min).is_integer() and float(v_max).is_integer():
+                bins = np.arange(v_min - 0.5, v_max + 1.5)
+            else:
+                bins = "auto"
+        else:
+            bins = "auto"
+    elif int_bins:
+        # bins given but user still wants integer alignment
+        v_min, v_max = values.min(), values.max()
+        if float(v_min).is_integer() and float(v_max).is_integer():
+            bins = np.arange(v_min - 0.5, v_max + 1.5)
+
     plt.figure(figsize=(4, 3))
-    plt.hist(values, bins=bins, color="steelblue")
+    plt.hist(values, bins=bins, color="steelblue", rwidth=1.0)
     if log_y:
         plt.yscale("log")
 
     plt.xlabel("Activation Value")
     plt.ylabel("Count")
-    plt.title(f"Histogram – Latent #{neuron_index}")
+    plt.title(f"Activation Histogram for Latent #{neuron_index}")
     plt.tight_layout()
     plt.show()
 
 # Histogram of Number of Active Latents per Image
 def plotActiveFeatureHistogram(
     layer_data: dict,
-    bins: int = 40,
+    bins: int | None = None,
     log_y: bool = False,
+    int_bins: bool = True,
     ):
+    
     if "sae_z" not in layer_data:
         raise KeyError("layer_data requires the key 'sae_z'.")
 
@@ -255,8 +279,18 @@ def plotActiveFeatureHistogram(
 
     active_per_img = (z != 0).sum(dim=1).numpy()
 
+    if bins is None:
+        if int_bins:
+            min_n, max_n = active_per_img.min(), active_per_img.max()
+            bins = np.arange(min_n - 0.5, max_n + 1.5)
+        else:
+            bins = "auto"
+    elif int_bins:
+        min_n, max_n = active_per_img.min(), active_per_img.max()
+        bins = np.arange(min_n - 0.5, max_n + 1.5)
+
     plt.figure(figsize=(4, 3))
-    plt.hist(active_per_img, bins=bins, color="seagreen")
+    plt.hist(active_per_img, bins=bins, color="seagreen", rwidth=1.0)
     if log_y:
         plt.yscale("log")
 
@@ -417,4 +451,4 @@ def getActiveLatents(
             out.append(torch.nonzero(mask, as_tuple=False).flatten().tolist())
         return out
     else:
-        raise ValueError("z must be 1‑D or 2‑D tensor")
+        raise ValueError("z must be 1-D or 2-D Tensor")
