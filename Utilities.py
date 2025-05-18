@@ -415,3 +415,4 @@ def loadSAE(
 
     print(f"[LOG] SAE Weights restored from {path}")
     return ckpt.get("extra", None)
+
