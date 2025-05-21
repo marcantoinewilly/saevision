@@ -61,39 +61,23 @@ def createImageDataloader(
         pin_memory=True
     )
 
-# Counts SAE Latent Units that are never non‑zero on the Loader
-@torch.no_grad()
 def countDeadNeurons(
-    sae: nn.Module,
-    model: nn.Module,
-    dataloader: torch.utils.data.DataLoader,
-    layer: int = -1,
-    device: torch.device | str | None = None,
-) -> tuple[int, torch.Tensor]:
+    layer_data: dict,
+    threshold: float = 0.0,
+    ) -> tuple[int, torch.Tensor]:
+  
+    if "sae_z" not in layer_data:
+        raise KeyError("layer_data requires key 'sae_z'.")
+    z = layer_data["sae_z"]              # (N, F)
+    if isinstance(z, torch.Tensor):
+        z = z.float()
+    else:
+        z = torch.from_numpy(z).float()
 
-    sae.eval()
-    model.eval()
-
-    device = device or next(sae.parameters()).device
-    sae.to(device)
-    model.to(device)
-
-    num_features = sae.num_features
-    seen_nonzero = torch.zeros(num_features, dtype=torch.bool, device=device)
-
-    for batch in dataloader:
-        imgs = batch[0] if isinstance(batch, (tuple, list)) else batch
-        imgs = imgs.to(device)
-
-        feats = model(pixel_values=imgs).hidden_states[layer][:, 0]
-        z = sae(feats)[1]
-
-        seen_nonzero |= (z != 0).any(dim=0)
-
-    dead_mask = ~seen_nonzero
+    active = (z.abs() > threshold).any(dim=0)  # (F,)
+    dead_mask = ~active
     dead_count = int(dead_mask.sum().item())
-    return dead_count, dead_mask.cpu()
-
+    return dead_count, dead_mask
 
 # Caches Images, ViT Activations, SAE Latents & Reconstructions
 @torch.no_grad()
