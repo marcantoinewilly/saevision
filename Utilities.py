@@ -292,7 +292,6 @@ def plotResidual(
     elif mode != "signed":
         raise ValueError("mode must be 'signed', 'abs' or 'sq'")
 
-    # coloured by magnitude
     colour_vals = np.abs(r)
 
     points   = np.array([np.arange(len(r)), r]).T.reshape(-1, 1, 2)
@@ -330,12 +329,7 @@ def plotLatentHistogram(
     int_bins: bool = False,
     figsize: tuple | None = None,
     ):
-    """
-    Plots a histogram of activation values for one latent neuron.
-    If bins is None, chooses bins automatically:
-      - If int_bins is True and min/max values are integers, uses integer-aligned bins.
-      - Otherwise falls back to 'auto'.
-    """
+
     if "sae_z" not in layer_data:
         raise KeyError("layer_data requires the key 'sae_z'.")
 
