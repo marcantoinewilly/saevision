@@ -257,8 +257,6 @@ def plotActivation(activations, figsize: tuple | None = None):
     plt.tight_layout()
     plt.show()
 
-
-# ----------------------------------------------------------------------
 # Residual plot: x - x̂ per latent dimension (similar look to plotActivation)
 def plotResidual(
     original: torch.Tensor | np.ndarray,
@@ -266,6 +264,7 @@ def plotResidual(
     mode: str = "signed",          # "signed" | "abs" | "sq"
     top_k: int | None = None,      # mark k largest |residual| dims
     figsize: tuple | None = None,
+    relative: bool = False,
     ):
 
     import matplotlib.collections as mcoll
@@ -285,6 +284,10 @@ def plotResidual(
         raise ValueError("original and recon must have same shape")
 
     r = x - xh
+    eps = 1e-8
+    if relative:
+        denom = np.maximum(np.abs(x), eps)
+        r = r / denom
     if mode == "abs":
         r = np.abs(r)
     elif mode == "sq":
@@ -299,7 +302,6 @@ def plotResidual(
     norm = mcolors.Normalize(colour_vals.min(), colour_vals.max())
     lc   = mcoll.LineCollection(segments, cmap='plasma', norm=norm)
     lc.set_array(colour_vals)
-    lc.set_linewidth(2)
 
     fig, ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
     ax.add_collection(lc)
@@ -308,15 +310,18 @@ def plotResidual(
     pad = 0.05 * (colour_vals.max() if colour_vals.max() else 1.0)
     ax.set_ylim(r.min() - pad, r.max() + pad)
 
-    # highlight largest residuals
     if top_k is not None and top_k > 0:
         idx = np.argsort(colour_vals)[-top_k:]
         ax.scatter(idx, r[idx], color="red", s=18, zorder=3)
 
     rmse = np.sqrt(np.mean((x - xh) ** 2))
     ax.set_xlabel("Latent Dimension", fontsize=12)
-    ax.set_ylabel(f"Residual ({mode})", fontsize=12)
-    ax.set_title(f"Residuals – RMSE = {rmse:.4f}", fontsize=14, fontweight="bold")
+    ylabel = f"Residual ({mode})"
+    if relative:
+        ylabel += " (rel.)"
+    ax.set_ylabel(ylabel, fontsize=12)
+    title = f"{'Relative residuals' if relative else 'Residuals'} - RMSE = {rmse:.4f}"
+    ax.set_title(title, fontsize=14)
     plt.tight_layout()
     plt.show()
 
