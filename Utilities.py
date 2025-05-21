@@ -158,6 +158,19 @@ def getReconstructionFromData(
         raise IndexError(f"idx {idx} out of range (N={recon.size(0)})")
     return recon[idx].clone()
 
+# Returns the original ViT CLS-embedding (x) for sample *idx*
+def getEmbeddingFromData(
+    layer_data: dict,
+    idx: int,   
+    ) -> torch.Tensor:
+
+    if "vit_act" not in layer_data:
+        raise KeyError("layer_data requires key 'vit_act'.")
+    acts = layer_data["vit_act"]            # (N, D)
+    if not (0 <= idx < acts.size(0)):
+        raise IndexError(f"idx {idx} out of range (N={acts.size(0)})")
+    return acts[idx].clone()
+
 # Returns / Plots the TopK Images that maximally activate a Latent
 def findImagesWithHighestActivation(
     layer_data: dict,
@@ -241,6 +254,70 @@ def plotActivation(activations, figsize: tuple | None = None):
     ax.set_ylabel('Activation (z)', fontsize=12)
     ax.set_title('Activations across Dimensions', fontsize=14, fontweight='bold')
 
+    plt.tight_layout()
+    plt.show()
+
+
+# ----------------------------------------------------------------------
+# Residual plot: x - x̂ per latent dimension (similar look to plotActivation)
+def plotResidual(
+    original: torch.Tensor | np.ndarray,
+    recon: torch.Tensor | np.ndarray,
+    mode: str = "signed",          # "signed" | "abs" | "sq"
+    top_k: int | None = None,      # mark k largest |residual| dims
+    figsize: tuple | None = None,
+    ):
+
+    import matplotlib.collections as mcoll
+
+    def _to_np(v):
+        if isinstance(v, torch.Tensor):
+            v = v.detach().cpu().flatten().numpy()
+        elif isinstance(v, np.ndarray):
+            v = v.reshape(-1)
+        else:
+            raise TypeError("inputs must be torch.Tensor or np.ndarray")
+        return v.astype(np.float32)
+
+    x  = _to_np(original)
+    xh = _to_np(recon)
+    if x.shape != xh.shape:
+        raise ValueError("original and recon must have same shape")
+
+    r = x - xh
+    if mode == "abs":
+        r = np.abs(r)
+    elif mode == "sq":
+        r = (r ** 2)
+    elif mode != "signed":
+        raise ValueError("mode must be 'signed', 'abs' or 'sq'")
+
+    # coloured by magnitude
+    colour_vals = np.abs(r)
+
+    points   = np.array([np.arange(len(r)), r]).T.reshape(-1, 1, 2)
+    segments = np.concatenate([points[:-1], points[1:]], axis=1)
+    norm = mcolors.Normalize(colour_vals.min(), colour_vals.max())
+    lc   = mcoll.LineCollection(segments, cmap='plasma', norm=norm)
+    lc.set_array(colour_vals)
+    lc.set_linewidth(2)
+
+    fig, ax = plt.subplots(figsize=figsize) if figsize else plt.subplots()
+    ax.add_collection(lc)
+    ax.axhline(0, color="grey", linewidth=0.8, linestyle="--")
+    ax.set_xlim(0, len(r) - 1)
+    pad = 0.05 * (colour_vals.max() if colour_vals.max() else 1.0)
+    ax.set_ylim(r.min() - pad, r.max() + pad)
+
+    # highlight largest residuals
+    if top_k is not None and top_k > 0:
+        idx = np.argsort(colour_vals)[-top_k:]
+        ax.scatter(idx, r[idx], color="red", s=18, zorder=3)
+
+    rmse = np.sqrt(np.mean((x - xh) ** 2))
+    ax.set_xlabel("Latent Dimension", fontsize=12)
+    ax.set_ylabel(f"Residual ({mode})", fontsize=12)
+    ax.set_title(f"Residuals – RMSE = {rmse:.4f}", fontsize=14, fontweight="bold")
     plt.tight_layout()
     plt.show()
 
