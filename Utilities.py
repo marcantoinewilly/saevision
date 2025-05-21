@@ -433,10 +433,20 @@ def saveSAE(sae: nn.Module, path: str):
     torch.save(sae.state_dict(), path)
     print(f"[LOG] state_dict saved → {path}")
 
-def loadSAE(sae: nn.Module, path: str, map_location: str | torch.device = "cpu"):
+def loadSAE(
+    sae: nn.Module,
+    path: str,
+    map_location: str | torch.device = "cpu",
+    ignore_buffers: tuple[str, ...] = ("prev_f",),
+    ):
+    
     state = torch.load(path, map_location=map_location)
-    sae.load_state_dict(state)
-    print(f"[LOG] state_dict loaded ← {path}")
+
+    for key in ignore_buffers:
+        state.pop(key, None)
+
+    sae.load_state_dict(state, strict=False)
+    print(f"[LOG] state_dict loaded ← {path} (ignored: {', '.join(ignore_buffers) or 'none'})")
 
 # Return Indices of active Latents in a Vector or Batch
 @torch.no_grad()
