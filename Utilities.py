@@ -146,6 +146,18 @@ def getLatentFromData(
         raise IndexError(f"idx {idx} out of range (N={z.size(0)})")
     return z[idx].clone()
 
+def getReconstructionFromData(
+    layer_data: dict,
+    idx: int,
+) -> torch.Tensor:
+    
+    if "sae_recon" not in layer_data:
+        raise KeyError("layer_data requires key 'sae_recon'.")
+    recon = layer_data["sae_recon"]          # (N, …)
+    if not (0 <= idx < recon.size(0)):
+        raise IndexError(f"idx {idx} out of range (N={recon.size(0)})")
+    return recon[idx].clone()
+
 # Returns / Plots the TopK Images that maximally activate a Latent
 def findImagesWithHighestActivation(
     layer_data: dict,
