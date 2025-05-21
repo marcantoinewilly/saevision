@@ -94,6 +94,7 @@ def countDeadNeurons(
     dead_count = int(dead_mask.sum().item())
     return dead_count, dead_mask.cpu()
 
+
 # Caches Images, ViT Activations, SAE Latents & Reconstructions
 @torch.no_grad()
 def collectLayerData(
@@ -129,6 +130,37 @@ def collectLayerData(
         sae_z      = torch.cat(sae_z, dim=0),
         sae_recon  = torch.cat(sae_rec, dim=0),
     )
+
+def getImageFromData(
+    layer_data: dict,
+    idx: int,
+    denorm: bool = False,
+    ) -> torch.Tensor:
+   
+    if "images" not in layer_data:
+        raise KeyError("layer_data requires key 'images'.")
+    images = layer_data["images"]       # (N,3,H,W)
+    if not (0 <= idx < images.size(0)):
+        raise IndexError(f"idx {idx} out of range (N={images.size(0)})")
+
+    img = images[idx].clone()           # (3,H,W)
+    if denorm:
+        mean = torch.tensor([0.48145466, 0.4578275, 0.40821073]).view(3,1,1)
+        std  = torch.tensor([0.26862954, 0.26130258, 0.27577711]).view(3,1,1)
+        img = (img * std + mean).clamp(0, 1)
+    return img
+
+def getLatentFromData(
+    layer_data: dict,
+    idx: int,
+    ) -> torch.Tensor:
+    
+    if "sae_z" not in layer_data:
+        raise KeyError("layer_data requires key 'sae_z'.")
+    z = layer_data["sae_z"]             # (N,F)
+    if not (0 <= idx < z.size(0)):
+        raise IndexError(f"idx {idx} out of range (N={z.size(0)})")
+    return z[idx].clone()
 
 # Returns / Plots the TopK Images that maximally activate a Latent
 def findImagesWithHighestActivation(
@@ -473,3 +505,32 @@ def getActiveLatents(
         return out
     else:
         raise ValueError("z must be 1-D or 2-D Tensor")
+
+def plotImage(
+    img: torch.Tensor | np.ndarray,
+    denorm: bool = True,
+    figsize: tuple | None = None,
+):
+    import matplotlib.pyplot as plt
+    import numpy as np
+    import torch
+
+    if isinstance(img, torch.Tensor):
+        arr = img.detach().cpu().float().numpy()
+    else:
+        arr = img.astype(np.float32)
+
+    means = np.array([0.48145466, 0.4578275, 0.40821073])[:, None, None]
+    stds  = np.array([0.26862954, 0.26130258, 0.27577711])[:, None, None]
+
+    if denorm:
+        arr = arr * stds + means
+    arr = np.clip(arr, 0.0, 1.0)
+
+    arr = arr.transpose(1, 2, 0)
+
+    plt.figure(figsize=figsize) if figsize else plt.figure()
+    plt.imshow(arr)
+    plt.axis("off")
+    plt.tight_layout()
+    plt.show()
