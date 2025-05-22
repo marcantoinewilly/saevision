@@ -1,4 +1,4 @@
-# saevision - Sparse Autoencoders (SAEs) for Visual Foundationm Models
+Sparse Autoencoders (SAEs) for Visual Foundationm Models
 
 This repository bundles several sparse autoencoders (SAEs) and helper utilities for exploring monosemantic features in the CLS-token activations of vision transformers.
 
