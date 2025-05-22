@@ -1,4 +1,4 @@
-# SAEVision - Sparse Autoencoders for ViT Activations
+# saevision - Sparse Autoencoders for ViT Activations
 
 This repository bundles several sparse autoencoders (SAEs) and helper utilities for exploring monosemantic features in the CLS-token activations of vision transformers.
 
