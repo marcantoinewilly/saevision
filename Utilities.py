@@ -15,6 +15,15 @@ plt.rcParams.update({
     "figure.dpi":     110,       # crisper text in Jupyter/Colab
 })
 
+def downloadImages(url: str, size: int):
+    pass
+
+def downloadViT(url: str):
+    pass
+
+def loadViT():
+    pass
+
 # Lightweight Dataset that applies CLIP Preprocessing to every Image File
 class ClipImageDataset(Dataset):
 
