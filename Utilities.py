@@ -18,9 +18,16 @@ plt.rcParams.update({
 def downloadImages(url: str, size: int):
     pass
 
-def downloadViT(url: str, output_path: str = "vit.cpl"):
+def downloadViT(output_path: str = "vit.cpl"):
+
     import gdown
-    gdown.download(url, output_path, quiet=False)
+    url = "https://drive.google.com/uc?id=1EZiws_atuzFLapKYyM9j2668UHSdtAs8"
+    try:
+        gdown.download(url, output_path, quiet=False)
+        print(f"[LOG] Downloaded ViT model to {output_path}")
+    except Exception as e:
+        print(f"[ERROR] Failed to download ViT model: {e}")
+        raise
 
 def loadViT():
     pass
