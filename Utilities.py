@@ -18,12 +18,13 @@ plt.rcParams.update({
 def downloadImages(url: str, size: int):
     pass
 
-def downloadViT(url: str):
-    pass
+def downloadViT(url: str, output_path: str = "vit.cpl"):
+    import gdown
+    gdown.download(url, output_path, quiet=False)
 
 def loadViT():
     pass
-
+    
 # Lightweight Dataset that applies CLIP Preprocessing to every Image File
 class ClipImageDataset(Dataset):
 
