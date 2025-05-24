@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-from PIL import Image
 import os
 from torch.utils.data import Dataset, DataLoader
 from transformers import CLIPProcessor
@@ -16,7 +15,19 @@ plt.rcParams.update({
 })
 
 def downloadImages(url: str, size: int):
-    pass
+
+    import os
+    import gdown
+
+    output_dir = "images"
+    os.makedirs(output_dir, exist_ok=True)
+
+    try:
+        gdown.download_folder(url, output=output_dir, quiet=False, use_cookies=False)
+        print(f"[LOG] Downloaded images to '{output_dir}'")
+    except Exception as e:
+        print(f"[ERROR] Failed to download images: {e}")
+        raise
 
 def downloadViT(output_path: str = "vit.cpl"):
 
