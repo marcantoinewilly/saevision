@@ -10,23 +10,34 @@ import matplotlib.colors as mcolors
 import scienceplots
 from PIL import Image
 import gdown
+import glob
+import zipfile
+import os
 
 plt.rcParams.update({
     "figure.figsize": (10, 6),   # bigger plots for interactive inspection
     "figure.dpi":     110,       # crisper text in Jupyter/Colab
 })
 
-def downloadImages(url: str, size: int):
+def getImages():
 
-    output_dir = "images"
-    os.makedirs(output_dir, exist_ok=True)
+    repo_base  = os.path.dirname(os.path.abspath(__file__))
+    zip_source = os.path.join(repo_base, "Images", "Square")
 
-    try:
-        gdown.download_folder(url, output=output_dir, quiet=False, use_cookies=False)
-        print(f"[LOG] Downloaded images to '{output_dir}'")
-    except Exception as e:
-        print(f"[ERROR] Failed to download images: {e}")
-        raise
+    dest_root  = os.path.join(os.getcwd(), "Images", "Square")
+    os.makedirs(dest_root, exist_ok=True)
+
+    zip_paths = glob.glob(os.path.join(zip_source, "Images-*.zip"))
+    if not zip_paths:
+        print("[WARN] No Images-*.zip archives found in repo.")
+        return
+
+    for zpath in zip_paths:
+        print(f"[LOG] Extracting {os.path.basename(zpath)} → {dest_root}")
+        with zipfile.ZipFile(zpath) as zf:
+            zf.extractall(dest_root)
+
+    print(f"[LOG] Images ready in '{dest_root}'")
 
 def downloadViT(output_path: str = "vit.cpl"):
     url = "https://drive.google.com/uc?id=1EZiws_atuzFLapKYyM9j2668UHSdtAs8"
