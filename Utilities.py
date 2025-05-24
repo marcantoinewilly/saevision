@@ -8,6 +8,8 @@ import numpy as np
 import matplotlib.collections as mcoll
 import matplotlib.colors as mcolors
 import scienceplots
+from PIL import Image
+import gdown
 
 plt.rcParams.update({
     "figure.figsize": (10, 6),   # bigger plots for interactive inspection
@@ -15,9 +17,6 @@ plt.rcParams.update({
 })
 
 def downloadImages(url: str, size: int):
-
-    import os
-    import gdown
 
     output_dir = "images"
     os.makedirs(output_dir, exist_ok=True)
@@ -30,8 +29,6 @@ def downloadImages(url: str, size: int):
         raise
 
 def downloadViT(output_path: str = "vit.cpl"):
-
-    import gdown
     url = "https://drive.google.com/uc?id=1EZiws_atuzFLapKYyM9j2668UHSdtAs8"
     try:
         gdown.download(url, output_path, quiet=False)
@@ -40,8 +37,16 @@ def downloadViT(output_path: str = "vit.cpl"):
         print(f"[ERROR] Failed to download ViT model: {e}")
         raise
 
-def loadViT():
-    pass
+def loadViT(path: str = "vit.cpl", device: str | torch.device | None = None):
+    if device is None:
+        device = "cpu"
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Checkpoint '{path}' not found.")
+
+    model = torch.load(path, map_location=device)
+    model = model.to(device)
+    model.eval()
+    return model
     
 # Lightweight Dataset that applies CLIP Preprocessing to every Image File
 class ClipImageDataset(Dataset):
@@ -295,7 +300,6 @@ def plotResidual(
     relative: bool = False,
     ):
 
-    import matplotlib.collections as mcoll
 
     def _to_np(v):
         if isinstance(v, torch.Tensor):
@@ -611,9 +615,6 @@ def plotImage(
     denorm: bool = True,
     figsize: tuple | None = None,
 ):
-    import matplotlib.pyplot as plt
-    import numpy as np
-    import torch
 
     if isinstance(img, torch.Tensor):
         arr = img.detach().cpu().float().numpy()
