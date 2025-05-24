@@ -1,0 +1,15 @@
+name: saevision
+channels:
+  - defaults
+  - conda-forge
+dependencies:
+  - python=3.10
+  - pip
+  - pip:
+    - torch
+    - transformers
+    - pillow
+    - numpy
+    - matplotlib
+    - scienceplots
+    - gdown
