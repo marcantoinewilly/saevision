@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import os
+from torchvision.models import vit_b_16
 from torch.utils.data import Dataset, DataLoader
 from transformers import CLIPProcessor
 import matplotlib.pyplot as plt
@@ -13,18 +14,20 @@ import gdown
 import glob
 import zipfile
 import os
+import shutil
 
 plt.rcParams.update({
     "figure.figsize": (10, 6),   # bigger plots for interactive inspection
     "figure.dpi":     110,       # crisper text in Jupyter/Colab
 })
 
-def getImages():
+
+def getSquareImages():
 
     repo_base  = os.path.dirname(os.path.abspath(__file__))
     zip_source = os.path.join(repo_base, "Images", "Square")
 
-    dest_root  = os.path.join(os.getcwd(), "Images", "Square")
+    dest_root  = os.path.join(os.getcwd(), "Square Images")
     os.makedirs(dest_root, exist_ok=True)
 
     zip_paths = glob.glob(os.path.join(zip_source, "Images-*.zip"))
@@ -37,24 +40,57 @@ def getImages():
         with zipfile.ZipFile(zpath) as zf:
             zf.extractall(dest_root)
 
-    print(f"[LOG] Images ready in '{dest_root}'")
+    subfolders = [
+        d for d in os.listdir(dest_root)
+        if os.path.isdir(os.path.join(dest_root, d))
+           and (d.startswith("Images-") or d == "__MACOSX")
+    ]
+    for sub in subfolders:
+        sub_path = os.path.join(dest_root, sub)
+        for root, _, files in os.walk(sub_path):
+            for fname in files:
+                src = os.path.join(root, fname)
+                dst = os.path.join(dest_root, fname)
+                if os.path.exists(dst):
+                    # avoid overwrite collisions by prefixing the folder name
+                    base, ext = os.path.splitext(fname)
+                    dst = os.path.join(dest_root, f"{sub}_{base}{ext}")
+                shutil.move(src, dst)
+        shutil.rmtree(sub_path)
 
-def downloadViT(output_path: str = "vit.cpl"):
+    print(f"[LOG] Images ready in '{dest_root}' (flattened)")
+
+def getViT():
+
     url = "https://drive.google.com/uc?id=1EZiws_atuzFLapKYyM9j2668UHSdtAs8"
+    dest_path = os.path.join(os.getcwd(), "vit.cpl")
+
     try:
-        gdown.download(url, output_path, quiet=False)
-        print(f"[LOG] Downloaded ViT model to {output_path}")
+        gdown.download(url, dest_path, quiet=False)
+        print(f"[LOG] Downloaded ViT model to {dest_path}")
+        return dest_path
     except Exception as e:
         print(f"[ERROR] Failed to download ViT model: {e}")
         raise
 
 def loadViT(path: str = "vit.cpl", device: str | torch.device | None = None):
+
     if device is None:
         device = "cpu"
     if not os.path.exists(path):
         raise FileNotFoundError(f"Checkpoint '{path}' not found.")
 
-    model = torch.load(path, map_location=device)
+    obj = torch.load(path, map_location=device)
+
+    if isinstance(obj, dict):  # state_dict only
+        model = vit_b_16(weights=None)
+        model.heads = nn.Identity()  # remove classifier
+        missing, unexpected = model.load_state_dict(obj, strict=False)
+        if missing or unexpected:
+            print(f"[WARN] loadViT: missing={len(missing)}, unexpected={len(unexpected)} parameters")
+    else:  # full model object
+        model = obj
+
     model = model.to(device)
     model.eval()
     return model
