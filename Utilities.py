@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import os
 from torchvision.models import vit_b_16
+from torchvision import transforms
+from torchvision.transforms import InterpolationMode
 from torch.utils.data import Dataset, DataLoader
 from transformers import CLIPProcessor
 import matplotlib.pyplot as plt
@@ -95,33 +97,64 @@ def loadViT(path: str = "vit.cpl", device: str | torch.device | None = None):
     model.eval()
     return model
     
-# Lightweight Dataset that applies CLIP Preprocessing to every Image File
-class ClipImageDataset(Dataset):
-
-    def __init__(self, folder_path: str, processor: CLIPProcessor):
-        self.image_paths = [
-            os.path.join(folder_path, f)
-            for f in os.listdir(folder_path)
-            if f.lower().endswith((".png", ".jpg", ".jpeg"))
-        ]
-        self.processor = processor
-
-    def __len__(self):
-        return len(self.image_paths)
-
-    def __getitem__(self, idx: int):
-        img = Image.open(self.image_paths[idx]).convert("RGB")
-        pixel_values = self.processor(images=img, return_tensors="pt").pixel_values
-        return pixel_values.squeeze(0)
-
-# Convenience Wrapper that returns a ClipImageDataset
 def createImageDataset(
     path: str,
-    model_name: str = "openai/clip-vit-base-patch32"
-) -> ClipImageDataset:
+    model: str,
+):
+  
+    if model.startswith("openai/clip"):
+        processor = CLIPProcessor.from_pretrained(model)
 
-    processor = CLIPProcessor.from_pretrained(model_name)
-    return ClipImageDataset(path, processor)
+        class ClipImageDataset(Dataset):
+            
+            def __init__(self, folder_path: str, proc: CLIPProcessor):
+                self.image_paths = [
+                    os.path.join(folder_path, f)
+                    for f in os.listdir(folder_path)
+                    if f.lower().endswith((".png", ".jpg", ".jpeg"))
+                ]
+                self.proc = proc
+
+            def __len__(self):
+                return len(self.image_paths)
+
+            def __getitem__(self, idx: int):
+                img = Image.open(self.image_paths[idx]).convert("RGB")
+                pix = self.proc(images=img,
+                                return_tensors="pt").pixel_values
+                return pix.squeeze(0)
+        
+        return ClipImageDataset(path, processor)
+
+    elif model in {"torch", "vit_b_16", "torchvision/vit_b_16"}:
+        transform = transforms.Compose([
+            transforms.Resize(224, interpolation=InterpolationMode.BICUBIC),
+            transforms.CenterCrop(224),
+            transforms.ToTensor(),
+            transforms.Normalize(
+                mean=(0.485, 0.456, 0.406),
+                std =(0.229, 0.224, 0.225),
+            ),
+        ])
+
+        class VitImageDataset(Dataset):
+   
+            def __init__(self, folder_path: str, tfm: transforms.Compose):
+                self.image_paths = [
+                    os.path.join(folder_path, f)
+                    for f in os.listdir(folder_path)
+                    if f.lower().endswith((".png", ".jpg", ".jpeg"))
+                ]
+                self.tfm = tfm
+
+            def __len__(self):
+                return len(self.image_paths)
+
+            def __getitem__(self, idx: int):
+                img = Image.open(self.image_paths[idx]).convert("RGB")
+                return self.tfm(img)
+
+        return VitImageDataset(path, transform)
 
 # Builds a DataLoader for the preprocessed Image Dataset
 def createImageDataloader(
