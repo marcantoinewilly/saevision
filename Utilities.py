@@ -24,21 +24,20 @@ plt.rcParams.update({
 })
 
 
-def getSquareImages():
+def unzipSquareImages():
 
     repo_base  = os.path.dirname(os.path.abspath(__file__))
     zip_source = os.path.join(repo_base, "Images", "Square")
 
-    dest_root  = os.path.join(os.getcwd(), "Square Images")
+    parent_dir = os.path.dirname(repo_base)
+    dest_root  = os.path.join(parent_dir, "Square Images")
     os.makedirs(dest_root, exist_ok=True)
 
     zip_paths = glob.glob(os.path.join(zip_source, "Images-*.zip"))
     if not zip_paths:
-        print("[WARN] No Images-*.zip archives found in repo.")
         return
 
     for zpath in zip_paths:
-        print(f"[LOG] Extracting {os.path.basename(zpath)} → {dest_root}")
         with zipfile.ZipFile(zpath) as zf:
             zf.extractall(dest_root)
 
@@ -51,31 +50,37 @@ def getSquareImages():
         sub_path = os.path.join(dest_root, sub)
         for root, _, files in os.walk(sub_path):
             for fname in files:
+                if fname.startswith("._"):
+                    continue
+
                 src = os.path.join(root, fname)
                 dst = os.path.join(dest_root, fname)
+
                 if os.path.exists(dst):
-                    # avoid overwrite collisions by prefixing the folder name
                     base, ext = os.path.splitext(fname)
                     dst = os.path.join(dest_root, f"{sub}_{base}{ext}")
+
                 shutil.move(src, dst)
         shutil.rmtree(sub_path)
 
-    print(f"[LOG] Images ready in '{dest_root}' (flattened)")
+    removed = 0
+    for fname in os.listdir(dest_root):
+        if fname.startswith("._"):
+            os.remove(os.path.join(dest_root, fname))
+            removed += 1
 
-def getViT():
+def downloadPEALViT():
 
     url = "https://drive.google.com/uc?id=1EZiws_atuzFLapKYyM9j2668UHSdtAs8"
     dest_path = os.path.join(os.getcwd(), "vit.cpl")
 
     try:
         gdown.download(url, dest_path, quiet=False)
-        print(f"[LOG] Downloaded ViT model to {dest_path}")
         return dest_path
     except Exception as e:
-        print(f"[ERROR] Failed to download ViT model: {e}")
         raise
 
-def loadViT(path: str = "vit.cpl", device: str | torch.device | None = None):
+def loadPEALViT(path: str = "vit.cpl", device: str | torch.device | None = None):
 
     if device is None:
         device = "cpu"
@@ -84,13 +89,13 @@ def loadViT(path: str = "vit.cpl", device: str | torch.device | None = None):
 
     obj = torch.load(path, map_location=device)
 
-    if isinstance(obj, dict):  # state_dict only
+    if isinstance(obj, dict):
         model = vit_b_16(weights=None)
-        model.heads = nn.Identity()  # remove classifier
+        model.heads = nn.Identity() 
         missing, unexpected = model.load_state_dict(obj, strict=False)
         if missing or unexpected:
             print(f"[WARN] loadViT: missing={len(missing)}, unexpected={len(unexpected)} parameters")
-    else:  # full model object
+    else: 
         model = obj
 
     model = model.to(device)
@@ -100,6 +105,7 @@ def loadViT(path: str = "vit.cpl", device: str | torch.device | None = None):
 def createImageDataset(
     path: str,
     model: str,
+    image_size: int = 224,
 ):
   
     if model.startswith("openai/clip"):
@@ -128,8 +134,8 @@ def createImageDataset(
 
     elif model in {"torch", "vit_b_16", "torchvision/vit_b_16"}:
         transform = transforms.Compose([
-            transforms.Resize(224, interpolation=InterpolationMode.BICUBIC),
-            transforms.CenterCrop(224),
+            transforms.Resize(image_size, interpolation=InterpolationMode.BICUBIC),
+            transforms.CenterCrop(image_size),
             transforms.ToTensor(),
             transforms.Normalize(
                 mean=(0.485, 0.456, 0.406),
@@ -160,12 +166,13 @@ def createImageDataset(
 def createImageDataloader(
     path: str,
     model_name: str = "openai/clip-vit-base-patch32",
+    image_size: int = 224,
     batch_size: int = 64,
     shuffle: bool = True,
     drop_last: bool = True,
 ) -> DataLoader:
 
-    dataset = createImageDataset(path, model_name)
+    dataset = createImageDataset(path, model_name, image_size=image_size)
     return DataLoader(
         dataset,
         batch_size=batch_size,
