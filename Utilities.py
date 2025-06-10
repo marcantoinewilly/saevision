@@ -69,16 +69,21 @@ def unzipSquareImages():
             os.remove(os.path.join(dest_root, fname))
             removed += 1
 
-def downloadPEALViT():
+def downloadPEALViT(size):
 
-    url = "https://drive.google.com/uc?id=1EZiws_atuzFLapKYyM9j2668UHSdtAs8"
-    dest_path = os.path.join(os.getcwd(), "vit.cpl")
+    ids = {
+        16: "1EZiws_atuzFLapKYyM9j2668UHSdtAs8",
+        64: "1NVJtmeBhXaLo6eo0Wv9zyUGFL98oVsSV",
+    }
 
-    try:
-        gdown.download(url, dest_path, quiet=True)
-        return dest_path
-    except Exception as e:
-        raise
+    file_id = ids[size]
+    url = f"https://drive.google.com/uc?id={file_id}"
+    filename = f"vit_{size}.cpl"
+    dest_path = os.path.join(os.getcwd(), filename)
+
+    gdown.download(url, dest_path, quiet=True)
+    return dest_path
+   
 
 def loadPEALViT(path: str = "vit.cpl", device: str | torch.device | None = None):
 
