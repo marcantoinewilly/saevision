@@ -167,10 +167,9 @@ def createImageDataset(
 
         return VitImageDataset(path, transform)
 
-# Builds a DataLoader for the preprocessed Image Dataset
 def createImageDataloader(
     path: str,
-    model_name: str = "openai/clip-vit-base-patch32",
+    model_name: str = "openai/clip-vit-base-patch16",
     image_size: int = 224,
     batch_size: int = 64,
     shuffle: bool = True,
